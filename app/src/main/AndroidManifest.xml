@@ -6,7 +6,9 @@
     <application
         android:name=".CrossFitLogApplication"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="CrossFit Log"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CrossFitLog">
         <activity
