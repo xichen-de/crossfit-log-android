@@ -47,7 +47,7 @@ The whiteboard photo stays pinned while the form scrolls. Tap **Fold** to collap
 Open **Export, backup & settings**:
 
 - **Selected data (`.json`)**: choose 4 weeks, 12 weeks, this year, a custom range, or complete history. Save or copy readable workout data. Photos are excluded.
-- **Migration backup (`.zip`)**: includes all sessions and original photos. Restore it in another installation; existing session IDs are skipped and existing data is not deleted.
+- **Backup (`.zip`)**: uses Android's system document picker to save a complete, checksummed database snapshot plus original photos and thumbnails to local storage, Google Drive, OneDrive, or another document provider. Restore validates the whole archive and then replaces the current log atomically.
 
 Export a migration backup before uninstalling the app because Android may erase private app data.
 

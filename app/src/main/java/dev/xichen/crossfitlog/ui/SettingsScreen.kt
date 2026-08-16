@@ -1,5 +1,6 @@
 package dev.xichen.crossfitlog.ui
 
+import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import dev.xichen.crossfitlog.BuildConfig
 import dev.xichen.crossfitlog.data.backup.BackupCodec
 import dev.xichen.crossfitlog.data.backup.BackupService
+import dev.xichen.crossfitlog.data.backup.PreparedBackup
 import dev.xichen.crossfitlog.data.export.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -42,6 +44,12 @@ fun SettingsScreen(backupService: BackupService, dataExportService: DataExportSe
     var showRangeChoices by remember { mutableStateOf(false) }
     var chosenRange by remember { mutableStateOf<DataExportRange?>(null) }
     var fileRange by remember { mutableStateOf<DataExportRange?>(null) }
+    var preparedBackup by remember { mutableStateOf<PreparedBackup?>(null) }
+    var showRestoreConfirmation by remember { mutableStateOf(false) }
+
+    DisposableEffect(backupService) {
+        onDispose { backupService.discard(preparedBackup) }
+    }
 
     fun runOperation(block: suspend () -> String) {
         if (!busy) scope.launch {
@@ -61,11 +69,34 @@ fun SettingsScreen(backupService: BackupService, dataExportService: DataExportSe
         }
     }
     val backupExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
-        if (uri != null) runOperation { backupService.export(uri, BuildConfig.VERSION_NAME); "Migration backup exported." }
+        val prepared = preparedBackup
+        preparedBackup = null
+        if (uri != null && prepared != null) runOperation { backupService.save(prepared, uri); "Backup saved." }
+        else backupService.discard(prepared)
     }
     val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) runOperation { backupService.restore(uri).message() }
+        if (uri != null && !busy) scope.launch {
+            busy = true
+            val message = runCatching { backupService.restore(uri).message() }.getOrElse(BackupCodec::friendlyFailure)
+            busy = false
+            snackbar.showSnackbar(message)
+            // Restoring replaces the Room instance. Recreate to discard ViewModels holding the closed DAO.
+            (context as? Activity)?.recreate()
+        }
     }
+
+    if (showRestoreConfirmation) AlertDialog(
+        onDismissRequest = { showRestoreConfirmation = false },
+        title = { Text("Replace current data?") },
+        text = { Text("Restoring a backup replaces every current session and workout photo. The archive is fully validated before anything is changed.") },
+        confirmButton = {
+            TextButton(onClick = {
+                showRestoreConfirmation = false
+                restore.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+            }) { Text("Choose backup") }
+        },
+        dismissButton = { TextButton(onClick = { showRestoreConfirmation = false }) { Text("Cancel") } },
+    )
 
     if (showRangeChoices) AlertDialog(
         onDismissRequest = { showRangeChoices = false },
@@ -136,11 +167,25 @@ fun SettingsScreen(backupService: BackupService, dataExportService: DataExportSe
                 }
             }
 
-            SettingsCard(Icons.Outlined.Restore, "Migration backup", "A complete ZIP includes every session and original photo for restoring elsewhere.") {
-                OutlinedButton(onClick = { backupExport.launch("crossfit-log-backup.zip") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Export complete backup")
+            SettingsCard(Icons.Outlined.Restore, "Backup & restore", "Save a complete database and every workout image to any location offered by Android, including cloud drives.") {
+                OutlinedButton(onClick = {
+                    if (!busy) scope.launch {
+                        busy = true
+                        runCatching { backupService.prepare(BuildConfig.VERSION_NAME) }
+                            .onSuccess {
+                                preparedBackup = it
+                                busy = false
+                                backupExport.launch(it.suggestedFilename)
+                            }
+                            .onFailure {
+                                busy = false
+                                snackbar.showSnackbar(BackupCodec.friendlyFailure(it))
+                            }
+                    }
+                }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Create backup")
                 }
-                OutlinedButton(onClick = { restore.launch(arrayOf("application/zip", "application/octet-stream")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { showRestoreConfirmation = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore backup")
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())

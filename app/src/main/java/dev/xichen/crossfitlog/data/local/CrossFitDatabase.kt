@@ -14,7 +14,8 @@ abstract class CrossFitDatabase : RoomDatabase() {
     abstract fun workoutDao(): WorkoutDao
 
     companion object {
+        const val SCHEMA_VERSION = 1
         fun create(context: Context): CrossFitDatabase =
-            Room.databaseBuilder(context, CrossFitDatabase::class.java, "crossfit-log.db").build()
+            Room.databaseBuilder(context, CrossFitDatabase::class.java, DatabaseController.DATABASE_NAME).build()
     }
 }
