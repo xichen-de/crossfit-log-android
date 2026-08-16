@@ -26,6 +26,7 @@ class PhotoStore(private val context: Context) {
 
     private val photos = File(context.filesDir, "photos").apply { mkdirs() }
     private val thumbnails = File(photos, "thumbnails").apply { mkdirs() }
+    val rootDirectory: File get() = photos
 
     fun photoFile(filename: String?): File? = filename?.let { File(photos, File(it).name) }?.takeIf(File::exists)
     fun thumbnailFile(filename: String?): File? = filename?.let { File(thumbnails, File(it).name) }?.takeIf(File::exists)
@@ -87,6 +88,34 @@ class PhotoStore(private val context: Context) {
         try { writeJpegAtomically(thumb, thumbFile, THUMBNAIL_JPEG_QUALITY) }
         finally { if (thumb !== bitmap) thumb.recycle(); bitmap.recycle() }
         return StoredPhoto(filename, filename)
+    }
+
+    fun copySnapshot(references: List<Pair<String, String?>>, targetPhotos: File) {
+        val targetThumbnails = File(targetPhotos, "thumbnails")
+        val seen = mutableSetOf<String>()
+        references.forEach { (photoFilename, thumbnailFilename) ->
+            require(File(photoFilename).name == photoFilename && seen.add("photo:$photoFilename")) { "A stored photo reference is invalid." }
+            val thumbnail = requireNotNull(thumbnailFilename) { "A stored thumbnail reference is missing." }
+            require(File(thumbnail).name == thumbnail && seen.add("thumbnail:$thumbnail")) { "A stored thumbnail reference is invalid." }
+            val sourcePhoto = requireNotNull(photoFile(photoFilename)) { "A workout photo is missing: $photoFilename" }
+            val sourceThumbnail = requireNotNull(thumbnailFile(thumbnail)) { "A workout thumbnail is missing: $thumbnail" }
+            targetPhotos.mkdirs()
+            targetThumbnails.mkdirs()
+            sourcePhoto.copyTo(File(targetPhotos, photoFilename), overwrite = false)
+            sourceThumbnail.copyTo(File(targetThumbnails, thumbnail), overwrite = false)
+        }
+    }
+
+    fun validateRestoredImage(file: File) {
+        require(file.isFile) { "A workout photo is missing." }
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, options)
+        require(options.outWidth > 0 && options.outHeight > 0) { "A restored photo is unreadable." }
+        var sample = 1
+        while (maxOf(options.outWidth / sample, options.outHeight / sample) > THUMBNAIL_MAX_DIMENSION) sample *= 2
+        val decoded = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: error("A restored photo is unreadable.")
+        decoded.recycle()
     }
 
     private fun scaleDown(source: Bitmap, maxDimension: Int): Bitmap {
