@@ -8,9 +8,14 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ImageNotSupported
@@ -102,19 +107,28 @@ fun FullscreenPhotoViewer(file: File?, description: String, onDismiss: () -> Uni
                 Text("This photo is unavailable.", color = Color.White, textAlign = TextAlign.Center)
             }
 
-            IconButton(onClick = onDismiss, Modifier.align(Alignment.TopEnd).padding(16.dp).background(Color.Black.copy(alpha = .55f))) {
-                Icon(Icons.Outlined.Close, "Close full-screen photo", tint = Color.White)
-            }
-            if (scale > 1f) IconButton(onClick = ::reset, Modifier.align(Alignment.TopStart).padding(16.dp).background(Color.Black.copy(alpha = .55f))) {
+            if (scale > 1f) IconButton(onClick = ::reset, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(16.dp).background(Color.Black.copy(alpha = .55f))) {
                 Icon(Icons.Outlined.RestartAlt, "Reset zoom", tint = Color.White)
             }
-            Text(
-                "Pinch to zoom · Drag to pan · Double-tap to zoom or reset",
-                color = Color.White.copy(alpha = .85f),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.BottomCenter).background(Color.Black.copy(alpha = .55f)).padding(12.dp),
-            )
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    "Pinch to zoom · Drag to pan · Double-tap to zoom or reset",
+                    color = Color.White.copy(alpha = .85f),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.background(Color.Black.copy(alpha = .55f)).padding(12.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(56.dp).background(Color.White.copy(alpha = .18f), CircleShape).testTag("close-fullscreen-photo"),
+                ) {
+                    Icon(Icons.Outlined.Close, "Close full-screen photo", Modifier.size(28.dp), tint = Color.White)
+                }
+            }
         }
     }
 }
