@@ -24,7 +24,7 @@ fun CrossFitLogApp(app: CrossFitLogApplication) {
             val rawId = entry.arguments?.getString("id") ?: "new"
             val existingId = rawId.takeUnless { it == "new" }
             val vm: EditorViewModel = viewModel(key = "editor-$rawId", factory = viewModelFactory {
-                initializer { EditorViewModel(createSavedStateHandle(), app.repository, app.photoStore, existingId) }
+                initializer { EditorViewModel(createSavedStateHandle(), app.repository, app.photoStore, app.whiteboardTextRecognizer, existingId) }
             })
             EditorScreen(vm, app.photoStore, onBack = { nav.popBackStack() }, onSaved = {
                 nav.navigate("details/${vm.state.value.draft.id}") { popUpTo("sessions") }

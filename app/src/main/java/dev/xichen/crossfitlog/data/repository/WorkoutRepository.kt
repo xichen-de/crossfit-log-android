@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
-class WorkoutRepository(private val dao: WorkoutDao) {
+class WorkoutRepository(private val dao: WorkoutDao, private val movementMatcher: MovementMatcher = MovementMatcher()) {
     fun observeSessions(): Flow<List<WorkoutSession>> = dao.observeSessions().map { rows -> rows.map(::toDomain) }
     fun observeSession(id: String): Flow<WorkoutSession?> = dao.observeSession(id).map { it?.let(::toDomain) }
     suspend fun getSession(id: String): WorkoutSession? = dao.getSession(id)?.let(::toDomain)
@@ -24,8 +24,13 @@ class WorkoutRepository(private val dao: WorkoutDao) {
     fun suggestions(prefix: String): Flow<List<String>> {
         val normalizedPrefix = normalizeMovementName(prefix)
         if (normalizedPrefix.isBlank()) return flowOf(emptyList())
-        return dao.movementSuggestions(normalizedPrefix).map { rows -> rows.map { it.displayName } }
+        return dao.observeMovementCandidates().map { rows ->
+            val candidates = mergeMovementCandidates(rows.map { it.displayName })
+            movementMatcher.rank(prefix, candidates).take(8).map { it.movement }
+        }
     }
+
+    suspend fun movementCandidates(): List<String> = mergeMovementCandidates(dao.movementCandidates().map { it.displayName })
 
     suspend fun create(session: WorkoutSession) = dao.insertComplete(session.toEntity(), session.movements.map { it.toEntity() })
     suspend fun update(session: WorkoutSession) = dao.replaceComplete(session.toEntity(), session.movements.map { it.toEntity() })

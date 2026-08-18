@@ -9,6 +9,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -56,6 +57,39 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
     if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("Delete this session?") }, text = { Text("The workout record and its managed photos will be permanently removed.") }, confirmButton = {
         TextButton(onClick = { confirmDelete = false; vm.delete(onDeleted) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
     }, dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
+    state.ocrSuggestions?.let { suggestions ->
+        var selected by remember(suggestions) { mutableStateOf(suggestions.toSet()) }
+        AlertDialog(
+            onDismissRequest = vm::dismissOcrSuggestions,
+            title = { Text("Suggested movements") },
+            text = {
+                if (suggestions.isEmpty()) Text("No confident movement matches were found. Try a clearer photo or add movements manually.")
+                else Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    Text("Review the movements found on the whiteboard.", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(8.dp))
+                    suggestions.forEach { suggestion ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                selected = if (suggestion in selected) selected - suggestion else selected + suggestion
+                            }.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = suggestion in selected,
+                                onCheckedChange = { checked -> selected = if (checked) selected + suggestion else selected - suggestion },
+                            )
+                            Text(suggestion)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (suggestions.isEmpty()) TextButton(onClick = vm::dismissOcrSuggestions) { Text("Done") }
+                else TextButton(onClick = { vm.addOcrSuggestions(selected) }, enabled = selected.isNotEmpty()) { Text("Add selected") }
+            },
+            dismissButton = { if (suggestions.isNotEmpty()) TextButton(onClick = vm::dismissOcrSuggestions) { Text("Cancel") } },
+        )
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -96,15 +130,28 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
                     LocalPhoto(null, "No selected whiteboard photo", Modifier.fillMaxWidth().aspectRatio(16f / 10f).clip(RoundedCornerShape(20.dp)))
                 }
                 if (state.photoProcessing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (state.whiteboardScanning) LinearProgressIndicator(Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { cameraOpen = true }, enabled = !state.photoProcessing, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.PhotoCamera, null); Spacer(Modifier.width(6.dp)); Text("Camera") }
-                    OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !state.photoProcessing, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text("Choose") }
+                    Button(onClick = { cameraOpen = true }, enabled = !state.photoProcessing && !state.whiteboardScanning, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.PhotoCamera, null); Spacer(Modifier.width(6.dp)); Text("Camera") }
+                    OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !state.photoProcessing && !state.whiteboardScanning, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text("Choose") }
                 }
-                if (state.draft.photoFilename != null) TextButton(
-                    onClick = vm::removePhoto,
-                    enabled = !state.photoProcessing,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Icon(Icons.Outlined.DeleteOutline, null); Spacer(Modifier.width(6.dp)); Text("Remove photo") }
+                if (state.draft.photoFilename != null) {
+                    OutlinedButton(
+                        onClick = vm::scanWhiteboard,
+                        enabled = !state.photoProcessing && !state.whiteboardScanning,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (state.whiteboardScanning) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Outlined.DocumentScanner, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (state.whiteboardScanning) "Scanning…" else "Scan whiteboard")
+                    }
+                    TextButton(
+                        onClick = vm::removePhoto,
+                        enabled = !state.photoProcessing && !state.whiteboardScanning,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Icon(Icons.Outlined.DeleteOutline, null); Spacer(Modifier.width(6.dp)); Text("Remove photo") }
+                }
             }
             item {
                 Text("When", style = MaterialTheme.typography.titleMedium)
