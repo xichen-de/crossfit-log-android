@@ -38,7 +38,7 @@ There are no accounts, ads, analytics, servers, or network permission. Live work
 
 The whiteboard photo stays pinned while the form scrolls. Tap **Fold** to collapse it temporarily, or tap the photo for full-screen pinch zoom and pan. OCR works with both camera photos and images chosen with the system Photo Picker.
 
-Movement autocomplete and OCR share the same fuzzy matcher. Their acceptance policies differ: autocomplete can be permissive because the user chooses a result, while OCR requires a high-confidence, unambiguous match. Existing session movements and duplicate OCR results are excluded from the review list.
+Movement autocomplete and OCR share the same fuzzy matcher. Their acceptance policies differ: autocomplete can be permissive because the user chooses a result, while OCR requires a high-confidence, unambiguous match. Autocomplete waits for at least two characters, limits the list to five items, and only admits fuzzy results once enough text has been entered; short queries use prefix matches. Existing session movements and duplicate OCR results are excluded from the review list.
 
 ### Movement catalog and matching
 

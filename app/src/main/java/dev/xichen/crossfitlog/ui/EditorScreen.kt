@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.xichen.crossfitlog.data.local.PhotoStore
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Calendar
@@ -229,7 +230,15 @@ private fun StickyPhotoReference(file: java.io.File?, expanded: Boolean, onToggl
 
 @Composable
 private fun MovementEditor(index: Int, movement: EditorMovement, vm: EditorViewModel, count: Int) {
-    val suggestions by remember(movement.name) { vm.suggestions(movement.name) }.collectAsState(emptyList())
+    val candidates by vm.movementCandidates.collectAsState()
+    var debouncedName by remember { mutableStateOf(movement.name) }
+    LaunchedEffect(movement.name) {
+        delay(150)
+        debouncedName = movement.name
+    }
+    val suggestions = remember(movement.name, debouncedName, candidates) {
+        if (movement.name == debouncedName) vm.rankSuggestions(debouncedName, candidates) else emptyList()
+    }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
