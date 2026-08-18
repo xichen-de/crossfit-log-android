@@ -36,6 +36,9 @@ class SessionFlowTest {
         compose.onNodeWithText("Training day").performClick()
         compose.onNodeWithTag("training-day-picker").assertIsDisplayed()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Front Squat").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Front Squat").performClick()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("training-day-picker").assertIsDisplayed()
         compose.onNodeWithText("Movement").performClick()
         compose.onNodeWithTag("movement-search").performTextInput("squat")
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Front Squat").fetchSemanticsNodes().isNotEmpty() }
