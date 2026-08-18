@@ -49,6 +49,27 @@ class MovementMatcher {
     }
 }
 
+fun rankMovementSuggestions(
+    query: String,
+    candidates: Collection<String>,
+    matcher: MovementMatcher = MovementMatcher(),
+    limit: Int = 5,
+): List<String> {
+    val normalizedQuery = normalizeMovementName(query)
+    val compactLength = normalizedQuery.replace(" ", "").length
+    if (compactLength < 2) return emptyList()
+    return matcher.rank(query, candidates)
+        .filter { match ->
+            match.exact || match.prefix || when {
+                compactLength >= 4 -> match.score >= 0.84
+                compactLength == 3 -> match.score >= 0.90
+                else -> false
+            }
+        }
+        .take(limit)
+        .map { it.movement }
+}
+
 internal fun normalizeForMatching(value: String): String = normalizeMovementName(value)
     .split(' ')
     .filter(String::isNotBlank)

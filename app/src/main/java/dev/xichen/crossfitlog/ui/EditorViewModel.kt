@@ -9,9 +9,10 @@ import dev.xichen.crossfitlog.data.local.PhotoStore
 import dev.xichen.crossfitlog.data.repository.WorkoutRepository
 import dev.xichen.crossfitlog.domain.*
 import dev.xichen.crossfitlog.ocr.WhiteboardTextRecognizer
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -113,7 +114,11 @@ class EditorViewModel(
         _state.update { it.copy(ocrSuggestions = null) }
     }
 
-    fun suggestions(text: String): Flow<List<String>> = repository.suggestions(text)
+    /** Merged movement candidates, cached and shared across every movement row's autocomplete. */
+    val movementCandidates = repository.observeMovementCandidateNames()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun rankSuggestions(text: String, candidates: List<String>): List<String> = repository.rankSuggestions(text, candidates)
 
     fun importPhoto(resolver: ContentResolver, uri: Uri) {
         if (_state.value.photoProcessing) return
