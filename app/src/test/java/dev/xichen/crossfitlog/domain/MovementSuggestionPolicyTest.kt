@@ -28,7 +28,11 @@ class MovementSuggestionPolicyTest {
         assertTrue(rankMovementSuggestions("zzzz", candidates).isEmpty())
     }
 
+    @Test fun exactMovementShowsNoRedundantSuggestions() {
+        assertTrue(rankMovementSuggestions("Push-up", candidates).isEmpty())
+    }
+
     @Test fun resultCountIsCapped() {
-        assertTrue(rankMovementSuggestions("pu", candidates).size <= 5)
+        assertTrue(rankMovementSuggestions("pu", candidates).size <= 3)
     }
 }

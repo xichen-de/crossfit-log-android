@@ -34,6 +34,7 @@ data class EditorDraft(
     val thumbnailFilename: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val movements: List<EditorMovement> = listOf(EditorMovement()),
+    val ocrSourceFilename: String? = null,
 )
 
 data class EditorUiState(
@@ -110,7 +111,8 @@ class EditorViewModel(
         if (current.photoFilename != originalPhotoFilename || current.thumbnailFilename != originalThumbnailFilename) {
             photoStore.deleteNow(current.photoFilename, current.thumbnailFilename)
         }
-        mutate { copy(photoFilename = null, thumbnailFilename = null) }
+        photoStore.deleteOcrSourceNow(current.ocrSourceFilename)
+        mutate { copy(photoFilename = null, thumbnailFilename = null, ocrSourceFilename = null) }
         _state.update { it.copy(ocrSuggestions = null) }
     }
 
@@ -126,10 +128,18 @@ class EditorViewModel(
             _state.update { it.copy(photoProcessing = true, error = null) }
             val previousPhoto = _state.value.draft.photoFilename
             val previousThumbnail = _state.value.draft.thumbnailFilename
+            val previousOcrSource = _state.value.draft.ocrSourceFilename
             runCatching { photoStore.import(resolver, uri, _state.value.draft.id) }
                 .onSuccess { stored ->
-                    mutate { copy(photoFilename = stored.photoFilename, thumbnailFilename = stored.thumbnailFilename) }
+                    mutate {
+                        copy(
+                            photoFilename = stored.photoFilename,
+                            thumbnailFilename = stored.thumbnailFilename,
+                            ocrSourceFilename = stored.ocrSourceFilename,
+                        )
+                    }
                     _state.update { it.copy(ocrSuggestions = null) }
+                    photoStore.deleteOcrSourceNow(previousOcrSource)
                     if (previousPhoto != originalPhotoFilename || previousThumbnail != originalThumbnailFilename) {
                         photoStore.delete(previousPhoto, previousThumbnail)
                     }
@@ -141,7 +151,10 @@ class EditorViewModel(
 
     fun scanWhiteboard() {
         if (_state.value.whiteboardScanning) return
-        val photo = photoFile() ?: run {
+        val draft = _state.value.draft
+        val photo = photoStore.ocrSourceFile(draft.ocrSourceFilename)
+            ?: photoFile()
+            ?: run {
             showError("Add a whiteboard photo before scanning.")
             return
         }
@@ -205,6 +218,7 @@ class EditorViewModel(
                 savedState.remove<String>("draft")
                 savedState.remove<String>("originalPhotoFilename")
                 savedState.remove<String>("originalThumbnailFilename")
+                photoStore.deleteOcrSourceNow(savedDraft.ocrSourceFilename)
                 _state.update { it.copy(saving = false, saved = true) }
             }.onFailure { error ->
                 saveGuard.reset()
@@ -224,6 +238,7 @@ class EditorViewModel(
                 if (draft.photoFilename != session.photoFilename || draft.thumbnailFilename != session.thumbnailFilename) {
                     photoStore.delete(draft.photoFilename, draft.thumbnailFilename)
                 }
+                photoStore.deleteOcrSourceNow(draft.ocrSourceFilename)
             }.onSuccess { onDeleted() }
                 .onFailure { e -> _state.update { it.copy(error = e.message ?: "The session could not be deleted.") } }
         }
@@ -238,6 +253,7 @@ class EditorViewModel(
                 photoStore.deleteNow(draft.photoFilename, draft.thumbnailFilename)
             }
         }
+        photoStore.deleteOcrSourceNow(_state.value.draft.ocrSourceFilename)
         super.onCleared()
     }
 
