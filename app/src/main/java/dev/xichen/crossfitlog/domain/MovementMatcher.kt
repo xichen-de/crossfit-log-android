@@ -53,12 +53,16 @@ fun rankMovementSuggestions(
     query: String,
     candidates: Collection<String>,
     matcher: MovementMatcher = MovementMatcher(),
-    limit: Int = 5,
+    limit: Int = 3,
 ): List<String> {
     val normalizedQuery = normalizeMovementName(query)
     val compactLength = normalizedQuery.replace(" ", "").length
     if (compactLength < 2) return emptyList()
-    return matcher.rank(query, candidates)
+    val ranked = matcher.rank(query, candidates)
+    // Once the field contains a known movement, autocomplete has nothing left to complete.
+    // Hiding the row also avoids repeating that movement alongside weaker fuzzy matches.
+    if (ranked.any { it.exact }) return emptyList()
+    return ranked
         .filter { match ->
             match.exact || match.prefix || when {
                 compactLength >= 4 -> match.score >= 0.84

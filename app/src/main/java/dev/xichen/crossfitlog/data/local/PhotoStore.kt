@@ -13,7 +13,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-data class StoredPhoto(val photoFilename: String, val thumbnailFilename: String)
+data class StoredPhoto(
+    val photoFilename: String,
+    val thumbnailFilename: String,
+    val ocrSourceFilename: String? = null,
+)
 
 class PhotoStore(private val context: Context) {
     private companion object {
@@ -26,10 +30,12 @@ class PhotoStore(private val context: Context) {
 
     private val photos = File(context.filesDir, "photos").apply { mkdirs() }
     private val thumbnails = File(photos, "thumbnails").apply { mkdirs() }
+    private val ocrSources = File(context.cacheDir, "whiteboard-ocr").apply { mkdirs() }
     val rootDirectory: File get() = photos
 
     fun photoFile(filename: String?): File? = filename?.let { File(photos, File(it).name) }?.takeIf(File::exists)
     fun thumbnailFile(filename: String?): File? = filename?.let { File(thumbnails, File(it).name) }?.takeIf(File::exists)
+    fun ocrSourceFile(filename: String?): File? = filename?.let { File(ocrSources, File(it).name) }?.takeIf(File::exists)
     fun newCameraFile(): File = File(context.cacheDir, "camera-${System.nanoTime()}.jpg")
 
     suspend fun import(resolver: ContentResolver, uri: Uri, sessionId: String): StoredPhoto = withContext(Dispatchers.IO) {
@@ -51,21 +57,27 @@ class PhotoStore(private val context: Context) {
         val thumb = scaleDown(full, THUMBNAIL_MAX_DIMENSION)
         // A new filename keeps an unsaved edit from overwriting the photo referenced by SQLite.
         val filename = "$sessionId-${UUID.randomUUID()}.jpg"
+        val ocrSourceFilename = "${UUID.randomUUID()}.source"
         val photoTarget = File(photos, filename)
         val thumbTarget = File(thumbnails, filename)
+        val ocrSourceTarget = File(ocrSources, ocrSourceFilename)
         try {
             writeJpegAtomically(full, photoTarget, PHOTO_JPEG_QUALITY)
             writeJpegAtomically(thumb, thumbTarget, THUMBNAIL_JPEG_QUALITY)
+            resolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(ocrSourceTarget).use(input::copyTo)
+            } ?: error("This image could not be read.")
         } catch (error: Throwable) {
             photoTarget.delete()
             thumbTarget.delete()
+            ocrSourceTarget.delete()
             throw error
         } finally {
             if (thumb !== full) thumb.recycle()
             if (full !== rotated) full.recycle()
             rotated.recycle()
         }
-        StoredPhoto(filename, filename)
+        StoredPhoto(filename, filename, ocrSourceFilename)
     }
 
     suspend fun delete(photoFilename: String?, thumbnailFilename: String?) = withContext(Dispatchers.IO) {
@@ -75,6 +87,10 @@ class PhotoStore(private val context: Context) {
     fun deleteNow(photoFilename: String?, thumbnailFilename: String?) {
         photoFilename?.let { File(photos, File(it).name).delete() }
         thumbnailFilename?.let { File(thumbnails, File(it).name).delete() }
+    }
+
+    fun deleteOcrSourceNow(filename: String?) {
+        filename?.let { File(ocrSources, File(it).name).delete() }
     }
 
     fun installRestoredPhoto(staged: File, sessionId: String): StoredPhoto {
