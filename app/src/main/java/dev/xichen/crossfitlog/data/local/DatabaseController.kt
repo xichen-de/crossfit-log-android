@@ -78,7 +78,6 @@ class DatabaseController(private val context: Context) {
                 check(stagedPhotos.renameTo(livePhotos)) { "Could not install restored photos." }
                 phase.writeText(PHASE_INSTALLED)
                 database().openHelper.writableDatabase
-                rollback.deleteRecursively()
             } catch (error: Throwable) {
                 rollbackInterruptedRestore(rollback)
                 database().openHelper.writableDatabase
