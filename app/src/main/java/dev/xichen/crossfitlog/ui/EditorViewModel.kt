@@ -8,9 +8,11 @@ import androidx.lifecycle.viewModelScope
 import dev.xichen.crossfitlog.data.local.PhotoStore
 import dev.xichen.crossfitlog.data.repository.WorkoutRepository
 import dev.xichen.crossfitlog.domain.*
-import kotlinx.coroutines.flow.Flow
+import dev.xichen.crossfitlog.ocr.WhiteboardTextRecognizer
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -39,6 +41,8 @@ data class EditorUiState(
     val loading: Boolean = false,
     val saving: Boolean = false,
     val photoProcessing: Boolean = false,
+    val whiteboardScanning: Boolean = false,
+    val ocrSuggestions: List<String>? = null,
     val error: String? = null,
     val saved: Boolean = false,
 )
@@ -47,6 +51,7 @@ class EditorViewModel(
     private val savedState: SavedStateHandle,
     private val repository: WorkoutRepository,
     private val photoStore: PhotoStore,
+    private val textRecognizer: WhiteboardTextRecognizer,
     private val existingId: String?,
 ) : ViewModel() {
     val isEditing: Boolean get() = existingId != null
@@ -106,9 +111,14 @@ class EditorViewModel(
             photoStore.deleteNow(current.photoFilename, current.thumbnailFilename)
         }
         mutate { copy(photoFilename = null, thumbnailFilename = null) }
+        _state.update { it.copy(ocrSuggestions = null) }
     }
 
-    fun suggestions(text: String): Flow<List<String>> = repository.suggestions(text)
+    /** Merged movement candidates, cached and shared across every movement row's autocomplete. */
+    val movementCandidates = repository.observeMovementCandidateNames()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun rankSuggestions(text: String, candidates: List<String>): List<String> = repository.rankSuggestions(text, candidates)
 
     fun importPhoto(resolver: ContentResolver, uri: Uri) {
         if (_state.value.photoProcessing) return
@@ -119,6 +129,7 @@ class EditorViewModel(
             runCatching { photoStore.import(resolver, uri, _state.value.draft.id) }
                 .onSuccess { stored ->
                     mutate { copy(photoFilename = stored.photoFilename, thumbnailFilename = stored.thumbnailFilename) }
+                    _state.update { it.copy(ocrSuggestions = null) }
                     if (previousPhoto != originalPhotoFilename || previousThumbnail != originalThumbnailFilename) {
                         photoStore.delete(previousPhoto, previousThumbnail)
                     }
@@ -126,6 +137,52 @@ class EditorViewModel(
                 .onFailure { error -> _state.update { it.copy(error = error.message ?: "The photo could not be saved.") } }
             _state.update { it.copy(photoProcessing = false) }
         }
+    }
+
+    fun scanWhiteboard() {
+        if (_state.value.whiteboardScanning) return
+        val photo = photoFile() ?: run {
+            showError("Add a whiteboard photo before scanning.")
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(whiteboardScanning = true, ocrSuggestions = null, error = null) }
+            runCatching {
+                val recognized = textRecognizer.recognize(Uri.fromFile(photo))
+                WhiteboardMovementSuggester().suggest(
+                    recognized = recognized,
+                    candidates = repository.movementCandidates(),
+                    alreadyPresent = _state.value.draft.movements.map { it.name },
+                )
+            }.onSuccess { suggestions ->
+                _state.update { it.copy(whiteboardScanning = false, ocrSuggestions = suggestions) }
+            }.onFailure {
+                _state.update {
+                    it.copy(
+                        whiteboardScanning = false,
+                        error = "The whiteboard could not be scanned. Try a clearer, well-lit photo.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissOcrSuggestions() = _state.update { it.copy(ocrSuggestions = null) }
+
+    fun addOcrSuggestions(selected: Collection<String>) {
+        val additions = newMovementSuggestions(_state.value.draft.movements.map { it.name }, selected)
+        if (additions.isNotEmpty()) mutate {
+            val updated = movements.toMutableList()
+            additions.forEach { name ->
+                val blankIndex = updated.indexOfFirst {
+                    it.name.isBlank() && it.load.isBlank() && it.result.isBlank() && it.note.isBlank()
+                }
+                if (blankIndex >= 0) updated[blankIndex] = updated[blankIndex].copy(name = name)
+                else updated += EditorMovement(name = name)
+            }
+            copy(movements = updated)
+        }
+        dismissOcrSuggestions()
     }
 
     fun save() {
