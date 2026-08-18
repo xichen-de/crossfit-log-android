@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,9 +35,10 @@ fun HistoryScreen(vm: HistoryViewModel, photoStore: PhotoStore, onBack: () -> Un
     val query by vm.query.collectAsState()
     val results by vm.results.collectAsState()
     val sessions by vm.sessions.collectAsState()
-    var mode by remember { mutableStateOf(HistoryMode.Movement) }
-    var selectedDay by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var dayInitialized by remember { mutableStateOf(false) }
+    var modeOrdinal by rememberSaveable { mutableIntStateOf(HistoryMode.Movement.ordinal) }
+    var selectedDay by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
+    var dayInitialized by rememberSaveable { mutableStateOf(false) }
+    val mode = HistoryMode.entries.getOrElse(modeOrdinal) { HistoryMode.Movement }
     val context = LocalContext.current
     LaunchedEffect(sessions) {
         if (!dayInitialized && sessions.isNotEmpty()) {
@@ -52,8 +54,8 @@ fun HistoryScreen(vm: HistoryViewModel, photoStore: PhotoStore, onBack: () -> Un
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             PrimaryTabRow(selectedTabIndex = mode.ordinal, containerColor = MaterialTheme.colorScheme.background, divider = {}) {
-                Tab(mode == HistoryMode.Movement, { mode = HistoryMode.Movement }, text = { Text("Movement") })
-                Tab(mode == HistoryMode.TrainingDay, { mode = HistoryMode.TrainingDay }, text = { Text("Training day") })
+                Tab(mode == HistoryMode.Movement, { modeOrdinal = HistoryMode.Movement.ordinal }, text = { Text("Movement") })
+                Tab(mode == HistoryMode.TrainingDay, { modeOrdinal = HistoryMode.TrainingDay.ordinal }, text = { Text("Training day") })
             }
             when (mode) {
                 HistoryMode.Movement -> MovementHistory(query, { vm.query.value = it }, results, photoStore, onOpen)
