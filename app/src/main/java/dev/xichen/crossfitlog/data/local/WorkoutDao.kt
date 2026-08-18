@@ -74,8 +74,13 @@ abstract class WorkoutDao {
 
     @Query(
         """SELECT normalized_name, MIN(name) AS display_name FROM movement_records
-            WHERE normalized_name LIKE :normalizedPrefix || '%'
-            GROUP BY normalized_name ORDER BY COUNT(*) DESC, display_name ASC LIMIT :limit"""
+            GROUP BY normalized_name ORDER BY COUNT(*) DESC, display_name ASC"""
     )
-    abstract fun movementSuggestions(normalizedPrefix: String, limit: Int = 8): Flow<List<MovementSuggestionRow>>
+    abstract fun observeMovementCandidates(): Flow<List<MovementSuggestionRow>>
+
+    @Query(
+        """SELECT normalized_name, MIN(name) AS display_name FROM movement_records
+            GROUP BY normalized_name ORDER BY COUNT(*) DESC, display_name ASC"""
+    )
+    abstract suspend fun movementCandidates(): List<MovementSuggestionRow>
 }
