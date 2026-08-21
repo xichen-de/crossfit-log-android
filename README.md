@@ -1,5 +1,7 @@
 # CrossFit Log
 
+[![Android CI](https://github.com/xichen-de/crossfit-log-android/actions/workflows/android-ci.yml/badge.svg?branch=main)](https://github.com/xichen-de/crossfit-log-android/actions/workflows/android-ci.yml)
+
 CrossFit Log is a private, offline Android workout journal. Record movements from a whiteboard, keep an optional photo visible while logging, search past training, and export or migrate your data.
 
 There are no accounts, ads, analytics, servers, or network permission. Workout data stays in an app-private SQLite database.
