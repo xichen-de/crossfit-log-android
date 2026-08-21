@@ -86,3 +86,7 @@ The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 - Storage Access Framework export and restore, with a versioned ZIP migration format
 
 Room schema snapshots are checked into `app/schemas`. Update the database version and provide a migration whenever stored tables or columns change.
+
+## License
+
+CrossFit Log is available under the [MIT License](LICENSE).
