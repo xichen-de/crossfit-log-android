@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
@@ -26,6 +28,7 @@ import dev.xichen.crossfitlog.domain.MovementSearchResult
 import dev.xichen.crossfitlog.domain.WorkoutSession
 import java.time.Instant
 import java.time.ZoneId
+import java.time.LocalDate
 
 private enum class HistoryMode { Movement, TrainingDay }
 
@@ -61,6 +64,9 @@ fun HistoryScreen(vm: HistoryViewModel, photoStore: PhotoStore, onBack: () -> Un
                 HistoryMode.Movement -> MovementHistory(query, { vm.query.value = it }, results, photoStore, onOpen)
                 HistoryMode.TrainingDay -> {
                     val selectedSessions = remember(sessions, selectedDay) { sessionsOnDay(sessions, selectedDay) }
+                    val selectedDate = localDate(selectedDay)
+                    val earliestDate = sessions.minOfOrNull { localDate(it.sessionTime) }
+                    val today = LocalDate.now()
                     TrainingDayHistory(selectedDay, selectedSessions, photoStore, onChooseDay = {
                         val date = Instant.ofEpochMilli(selectedDay).atZone(ZoneId.systemDefault()).toLocalDate()
                         val dialog = DatePickerDialog(context, { _, year, month, day ->
@@ -68,11 +74,15 @@ fun HistoryScreen(vm: HistoryViewModel, photoStore: PhotoStore, onBack: () -> Un
                                 .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                         }, date.year, date.monthValue - 1, date.dayOfMonth)
                         dialog.datePicker.maxDate = System.currentTimeMillis()
-                        sessions.lastOrNull()?.let {
-                            dialog.datePicker.minDate = localDate(it.sessionTime).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        earliestDate?.let {
+                            dialog.datePicker.minDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                         }
                         dialog.show()
-                    }, onOpen = onOpen)
+                    }, canGoPrevious = earliestDate?.let { selectedDate.isAfter(it) } == true,
+                        canGoNext = selectedDate.isBefore(today),
+                        onPreviousDay = { selectedDay = selectedDate.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() },
+                        onNextDay = { selectedDay = selectedDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() },
+                        onOpen = onOpen)
                 }
             }
         }
@@ -127,13 +137,28 @@ private fun TrainingDayHistory(
     sessions: List<WorkoutSession>,
     photoStore: PhotoStore,
     onChooseDay: () -> Unit,
+    canGoPrevious: Boolean,
+    canGoNext: Boolean,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        OutlinedButton(onClick = onChooseDay, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp).testTag("training-day-picker")) {
-            Icon(Icons.Outlined.CalendarMonth, null)
-            Spacer(Modifier.width(8.dp))
-            Text(formatDay(selectedDay))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onPreviousDay, enabled = canGoPrevious) {
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous training day")
+            }
+            OutlinedButton(onClick = onChooseDay, Modifier.weight(1f).testTag("training-day-picker")) {
+                Icon(Icons.Outlined.CalendarMonth, null)
+                Spacer(Modifier.width(8.dp))
+                Text(formatDay(selectedDay))
+            }
+            IconButton(onClick = onNextDay, enabled = canGoNext) {
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next training day")
+            }
         }
         if (sessions.isEmpty()) Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Text("No training sessions were saved on this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -48,6 +48,7 @@ data class EditorUiState(
     val ocrSuggestions: List<String>? = null,
     val error: String? = null,
     val saved: Boolean = false,
+    val hasUnsavedChanges: Boolean = false,
 )
 
 class EditorViewModel(
@@ -56,11 +57,12 @@ class EditorViewModel(
     private val photoStore: PhotoStore,
     private val textRecognizer: WhiteboardTextRecognizer,
     private val existingId: String?,
+    private val duplicateSourceId: String? = null,
 ) : ViewModel() {
     val isEditing: Boolean get() = existingId != null
     private val json = Json { ignoreUnknownKeys = true }
     private val saveGuard = DuplicateSaveGuard()
-    private val _state = MutableStateFlow(EditorUiState(loading = existingId != null))
+    private val _state = MutableStateFlow(EditorUiState(loading = existingId != null || duplicateSourceId != null))
     val state = _state.asStateFlow()
     private var initialized = false
     private var originalPhotoFilename: String? = null
@@ -69,7 +71,10 @@ class EditorViewModel(
     init {
         val restored = savedState.get<String>("draft")?.let { runCatching { json.decodeFromString<EditorDraft>(it) }.getOrNull() }
         if (restored != null) {
-            _state.value = EditorUiState(draft = restored)
+            _state.value = EditorUiState(
+                draft = restored,
+                hasUnsavedChanges = savedState.get<Boolean>("hasUnsavedChanges") ?: false,
+            )
             initialized = true
             if (savedState.contains("originalPhotoFilename")) {
                 originalPhotoFilename = savedState.get<String>("originalPhotoFilename")?.ifEmpty { null }
@@ -87,6 +92,13 @@ class EditorViewModel(
                     rememberOriginalPhoto(session)
                     update(session.toDraft(), persist = true)
                 } ?: run { _state.update { it.copy(loading = false, error = "This session no longer exists.") } }
+                initialized = true
+            }
+        } else if (duplicateSourceId != null) {
+            viewModelScope.launch {
+                repository.getSession(duplicateSourceId)?.let { session ->
+                    update(session.toDuplicateDraft(), persist = true, markChanged = true)
+                } ?: run { _state.update { it.copy(loading = false, error = "The session to duplicate no longer exists.") } }
                 initialized = true
             }
         } else {
@@ -224,8 +236,9 @@ class EditorViewModel(
                 savedState.remove<String>("draft")
                 savedState.remove<String>("originalPhotoFilename")
                 savedState.remove<String>("originalThumbnailFilename")
+                savedState.remove<Boolean>("hasUnsavedChanges")
                 photoStore.deleteOcrSourceNow(savedDraft.ocrSourceFilename)
-                _state.update { it.copy(saving = false, saved = true) }
+                _state.update { it.copy(saving = false, saved = true, hasUnsavedChanges = false) }
             }.onFailure { error ->
                 saveGuard.reset()
                 _state.update { it.copy(saving = false, error = error.message ?: "The session could not be saved.") }
@@ -267,12 +280,15 @@ class EditorViewModel(
         super.onCleared()
     }
 
-    private fun mutate(block: EditorDraft.() -> EditorDraft) = update(_state.value.draft.block(), true)
-    private fun update(draft: EditorDraft, persist: Boolean) {
-        _state.update { it.copy(draft = draft, loading = false) }
-        if (persist) persist(draft)
+    private fun mutate(block: EditorDraft.() -> EditorDraft) = update(_state.value.draft.block(), persist = true, markChanged = true)
+    private fun update(draft: EditorDraft, persist: Boolean, markChanged: Boolean = false) {
+        _state.update { it.copy(draft = draft, loading = false, hasUnsavedChanges = it.hasUnsavedChanges || markChanged) }
+        if (persist) persist(draft, _state.value.hasUnsavedChanges)
     }
-    private fun persist(draft: EditorDraft) { savedState["draft"] = json.encodeToString(draft) }
+    private fun persist(draft: EditorDraft, hasUnsavedChanges: Boolean = false) {
+        savedState["draft"] = json.encodeToString(draft)
+        savedState["hasUnsavedChanges"] = hasUnsavedChanges
+    }
     private fun rememberOriginalPhoto(session: WorkoutSession?) {
         originalPhotoFilename = session?.photoFilename
         originalThumbnailFilename = session?.thumbnailFilename
@@ -288,6 +304,24 @@ class EditorViewModel(
             movements.mapIndexed { index, m -> MovementRecord(m.id, id, cleanText(m.name), normalizeMovementName(m.name), cleanText(m.load), cleanText(m.result), cleanText(m.note), index) })
     }
 }
+
+internal fun WorkoutSession.toDuplicateDraft(now: Long = System.currentTimeMillis()) = EditorDraft(
+    id = UUID.randomUUID().toString(),
+    sessionTime = now,
+    sessionNote = sessionNote,
+    photoFilename = null,
+    thumbnailFilename = null,
+    createdAt = now,
+    movements = movements.map { movement ->
+        EditorMovement(
+            id = UUID.randomUUID().toString(),
+            name = movement.name,
+            load = movement.load,
+            result = movement.result,
+            note = movement.note,
+        )
+    },
+)
 
 class DuplicateSaveGuard {
     private val running = AtomicBoolean(false)
