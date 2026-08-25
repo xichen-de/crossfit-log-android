@@ -10,6 +10,8 @@ import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -40,16 +42,27 @@ fun CameraCaptureScreen(photoStore: PhotoStore, onCancel: () -> Unit, onCaptured
     }
     if (!granted) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; return }
     val controller = remember { LifecycleCameraController(context).apply { setEnabledUseCases(CameraController.IMAGE_CAPTURE) } }
+    var capturing by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) { runCatching { controller.bindToLifecycle(lifecycleOwner) }.onFailure { onError("The camera is unavailable.") }; onDispose { controller.unbind() } }
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { PreviewView(it).apply { this.controller = controller; scaleType = PreviewView.ScaleType.FIT_CENTER } }, Modifier.fillMaxSize())
-        IconButton(onClick = onCancel, modifier = Modifier.align(Alignment.TopStart).padding(16.dp)) { Icon(Icons.Outlined.Close, "Cancel camera", tint = MaterialTheme.colorScheme.onPrimary) }
+        IconButton(
+            onClick = onCancel,
+            enabled = !capturing,
+            modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(16.dp)
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = .6f), CircleShape),
+        ) { Icon(Icons.Outlined.Close, "Cancel camera", tint = MaterialTheme.colorScheme.inverseOnSurface) }
         FloatingActionButton(onClick = {
+            if (capturing) return@FloatingActionButton
+            capturing = true
             val file = photoStore.newCameraFile()
             controller.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) = onCaptured(file)
-                override fun onError(exception: ImageCaptureException) { file.delete(); onError("The photo could not be taken.") }
+                override fun onError(exception: ImageCaptureException) { capturing = false; file.delete(); onError("The photo could not be taken.") }
             })
-        }, modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)) { Icon(Icons.Outlined.PhotoCamera, "Take photo") }
+        }, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(32.dp)) {
+            if (capturing) CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+            else Icon(Icons.Outlined.PhotoCamera, "Take photo")
+        }
     }
 }
