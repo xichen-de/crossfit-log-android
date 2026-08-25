@@ -28,7 +28,7 @@ class WorkoutRepository(private val dao: WorkoutDao, private val movementMatcher
         val normalizedQuery = normalizeMovementName(query)
         if (normalizedQuery.isBlank()) return flowOf(emptyList())
         return dao.searchMovements(normalizedQuery).map { rows ->
-            rows.map { MovementSearchResult(it.sessionId, it.sessionTime, it.movementName, it.load, it.result, it.note, it.thumbnailFilename) }
+            rows.map { MovementSearchResult(it.movementId, it.sessionId, it.sessionTime, it.movementName, it.load, it.result, it.note, it.thumbnailFilename) }
         }
     }
 
@@ -42,7 +42,9 @@ class WorkoutRepository(private val dao: WorkoutDao, private val movementMatcher
         return rankMovementSuggestions(prefix, candidates, movementMatcher)
     }
 
-    suspend fun movementCandidates(): List<String> = mergeMovementCandidates(dao.movementCandidates().map { it.displayName })
+    suspend fun movementCandidates(): List<String> = withContext(Dispatchers.Default) {
+        mergeMovementCandidates(dao.movementCandidates().map { it.displayName })
+    }
 
     suspend fun create(session: WorkoutSession) = dao.insertComplete(session.toEntity(), session.movements.map { it.toEntity() })
     suspend fun update(session: WorkoutSession) = dao.replaceComplete(session.toEntity(), session.movements.map { it.toEntity() })

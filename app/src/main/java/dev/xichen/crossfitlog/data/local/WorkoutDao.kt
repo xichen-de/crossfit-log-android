@@ -63,7 +63,7 @@ abstract class WorkoutDao {
     }
 
     @Query(
-        """SELECT m.session_id, s.session_time, m.name AS movement_name,
+        """SELECT m.id AS movement_id, m.session_id, s.session_time, m.name AS movement_name,
             m.load, m.result, m.note, s.thumbnail_filename
             FROM movement_records m JOIN workout_sessions s ON s.id = m.session_id
             WHERE m.normalized_name LIKE '%' || :normalizedQuery || '%'

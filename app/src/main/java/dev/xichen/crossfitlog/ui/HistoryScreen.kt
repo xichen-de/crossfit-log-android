@@ -102,7 +102,7 @@ private fun MovementHistory(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(results) { result ->
+            items(results, key = { it.movementId }) { result ->
                 Card(Modifier.fillMaxWidth().clickable { onOpen(result.sessionId) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         LocalPhoto(photoStore.thumbnailFile(result.thumbnailFilename), "Session whiteboard", Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)))

@@ -51,6 +51,7 @@ data class SessionWithMovements(
 )
 
 data class MovementSearchRow(
+    @ColumnInfo(name = "movement_id") val movementId: String,
     @ColumnInfo(name = "session_id") val sessionId: String,
     @ColumnInfo(name = "session_time") val sessionTime: Long,
     @ColumnInfo(name = "movement_name") val movementName: String,

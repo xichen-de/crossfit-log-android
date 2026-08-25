@@ -29,7 +29,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.xichen.crossfitlog.data.local.PhotoStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Calendar
@@ -236,8 +238,13 @@ private fun MovementEditor(index: Int, movement: EditorMovement, vm: EditorViewM
         delay(150)
         debouncedName = movement.name
     }
-    val suggestions = remember(movement.name, debouncedName, candidates) {
-        if (movement.name == debouncedName) vm.rankSuggestions(debouncedName, candidates) else emptyList()
+    var suggestions by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(debouncedName, candidates) {
+        suggestions = if (movement.name == debouncedName) {
+            withContext(Dispatchers.Default) { vm.rankSuggestions(debouncedName, candidates) }
+        } else {
+            emptyList()
+        }
     }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

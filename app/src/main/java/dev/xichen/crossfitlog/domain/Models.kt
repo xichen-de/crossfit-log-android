@@ -26,6 +26,7 @@ data class MovementRecord(
 )
 
 data class MovementSearchResult(
+    val movementId: String,
     val sessionId: String,
     val sessionTime: Long,
     val movementName: String,

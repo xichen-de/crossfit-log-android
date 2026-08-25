@@ -9,12 +9,14 @@ import dev.xichen.crossfitlog.data.local.PhotoStore
 import dev.xichen.crossfitlog.data.repository.WorkoutRepository
 import dev.xichen.crossfitlog.domain.*
 import dev.xichen.crossfitlog.ocr.WhiteboardTextRecognizer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -160,13 +162,17 @@ class EditorViewModel(
         }
         viewModelScope.launch {
             _state.update { it.copy(whiteboardScanning = true, ocrSuggestions = null, error = null) }
+            val alreadyPresent = _state.value.draft.movements.map { it.name }
             runCatching {
                 val recognized = textRecognizer.recognize(Uri.fromFile(photo))
-                WhiteboardMovementSuggester().suggest(
-                    recognized = recognized,
-                    candidates = repository.movementCandidates(),
-                    alreadyPresent = _state.value.draft.movements.map { it.name },
-                )
+                val candidates = repository.movementCandidates()
+                withContext(Dispatchers.Default) {
+                    WhiteboardMovementSuggester().suggest(
+                        recognized = recognized,
+                        candidates = candidates,
+                        alreadyPresent = alreadyPresent,
+                    )
+                }
             }.onSuccess { suggestions ->
                 _state.update { it.copy(whiteboardScanning = false, ocrSuggestions = suggestions) }
             }.onFailure {
@@ -230,7 +236,11 @@ class EditorViewModel(
     fun delete(onDeleted: () -> Unit) {
         val sessionId = existingId ?: return
         viewModelScope.launch {
-            val session = repository.getSession(sessionId) ?: return@launch
+            val session = repository.getSession(sessionId)
+            if (session == null) {
+                _state.update { it.copy(error = "This session no longer exists.") }
+                return@launch
+            }
             runCatching {
                 repository.delete(session)
                 photoStore.delete(session.photoFilename, session.thumbnailFilename)

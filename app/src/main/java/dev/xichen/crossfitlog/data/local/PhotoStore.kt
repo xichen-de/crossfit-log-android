@@ -99,7 +99,13 @@ class PhotoStore(private val context: Context) {
         val thumbFile = File(thumbnails, filename)
         check(!full.exists() && !thumbFile.exists()) { "A photo with this ID already exists." }
         staged.copyTo(full, overwrite = false)
-        val bitmap = BitmapFactory.decodeFile(full.path) ?: run { full.delete(); error("Restored photo is unreadable.") }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(full.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { full.delete(); error("Restored photo is unreadable.") }
+        var sample = 1
+        while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > THUMBNAIL_MAX_DIMENSION) sample *= 2
+        val bitmap = BitmapFactory.decodeFile(full.path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: run { full.delete(); error("Restored photo is unreadable.") }
         val thumb = scaleDown(bitmap, THUMBNAIL_MAX_DIMENSION)
         try { writeJpegAtomically(thumb, thumbFile, THUMBNAIL_JPEG_QUALITY) }
         finally { if (thumb !== bitmap) thumb.recycle(); bitmap.recycle() }

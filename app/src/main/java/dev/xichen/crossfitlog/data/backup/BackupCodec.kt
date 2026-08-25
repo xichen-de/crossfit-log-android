@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.DigestInputStream
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -49,10 +50,12 @@ object BackupCodec {
             zip.closeEntry()
             manifest.files.forEach { item ->
                 val source = File(root, item.path)
-                require(source.isFile && source.length() == item.size && sha256(source) == item.sha256) { "A backup source file changed while it was being archived." }
+                require(source.isFile && source.length() == item.size) { "A backup source file changed while it was being archived." }
                 zip.putNextEntry(ZipEntry(item.path))
-                source.inputStream().use { it.copyTo(zip) }
+                val digest = MessageDigest.getInstance("SHA-256")
+                DigestInputStream(source.inputStream(), digest).use { it.copyTo(zip) }
                 zip.closeEntry()
+                require(digest.digest().joinToString("") { "%02x".format(it) } == item.sha256) { "A backup source file changed while it was being archived." }
             }
         }
     }
