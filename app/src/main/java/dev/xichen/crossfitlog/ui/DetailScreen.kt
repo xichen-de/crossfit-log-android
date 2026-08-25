@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
@@ -67,8 +68,7 @@ fun DetailScreen(sessionFlow: StateFlow<WorkoutSession?>, photoStore: PhotoStore
             item {
                 Text("MOVEMENTS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(value.movements.size) { index ->
-                val movement = value.movements[index]
+            itemsIndexed(value.movements, key = { _, movement -> movement.id }) { index, movement ->
                 Surface(
                     shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shadowElevation = 2.dp,
