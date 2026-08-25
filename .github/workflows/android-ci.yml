@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    name: Unit tests, lint, and debug build
+    name: Tests, lint, and debug/release builds
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -33,4 +33,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run hardware-free checks
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+        run: ./gradlew testDebugUnitTest lintRelease assembleDebug assembleDebugAndroidTest assembleRelease --stacktrace
+
+      - name: Verify offline release manifest
+        run: |
+          manifest=app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+          if grep -qE 'android.permission.(INTERNET|ACCESS_NETWORK_STATE)' "$manifest"; then
+            echo "Release manifest unexpectedly grants network access."
+            exit 1
+          fi

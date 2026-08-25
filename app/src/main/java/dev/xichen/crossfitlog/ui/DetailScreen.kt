@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -23,15 +24,28 @@ import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(sessionFlow: StateFlow<WorkoutSession?>, photoStore: PhotoStore, onBack: () -> Unit, onEdit: () -> Unit) {
+fun DetailScreen(
+    sessionFlow: StateFlow<WorkoutSession?>,
+    photoStore: PhotoStore,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
+) {
     val session by sessionFlow.collectAsState()
     var showPhotoViewer by remember { mutableStateOf(false) }
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { TopAppBar(title = { Text("Session") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } }, actions = {
+        TextButton(onClick = onDuplicate) {
+            Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(5.dp))
+            Text("Duplicate")
+        }
         FilledTonalButton(onClick = onEdit, modifier = Modifier.padding(end = 8.dp)) { Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Edit") }
     }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)) }) { padding ->
         val value = session
         if (value == null) Box(Modifier.fillMaxSize().padding(padding)) { CircularProgressIndicator(Modifier.padding(32.dp)) }
-        else LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 40.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        else {
+            val photoFile = photoStore.photoFile(value.photoFilename)
+            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 40.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
             item {
                 Column {
                     Text("TRAINING SESSION", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -45,14 +59,13 @@ fun DetailScreen(sessionFlow: StateFlow<WorkoutSession?>, photoStore: PhotoStore
                     }
                 }
             }
-            item {
-                val photoFile = photoStore.photoFile(value.photoFilename)
+            if (photoFile != null) item {
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(20.dp))
-                        .clickable(enabled = photoFile != null) { showPhotoViewer = true },
+                        .clickable { showPhotoViewer = true },
                 ) {
                     LocalPhoto(photoFile, "Whiteboard photo", Modifier.fillMaxSize(), ContentScale.Fit)
-                    if (photoFile != null) Surface(
+                    Surface(
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
                         shape = RoundedCornerShape(999.dp),
                         color = MaterialTheme.colorScheme.scrim.copy(alpha = .65f),
@@ -97,6 +110,7 @@ fun DetailScreen(sessionFlow: StateFlow<WorkoutSession?>, photoStore: PhotoStore
                     }
                 }
             }
+        }
         }
     }
     if (showPhotoViewer) FullscreenPhotoViewer(photoStore.photoFile(session?.photoFilename), "Whiteboard photo", onDismiss = { showPhotoViewer = false })

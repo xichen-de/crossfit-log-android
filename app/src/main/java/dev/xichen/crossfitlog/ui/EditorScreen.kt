@@ -43,6 +43,7 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
     val context = LocalContext.current
     var cameraOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmDiscard by remember { mutableStateOf(false) }
     var photoExpanded by rememberSaveable { mutableStateOf(true) }
     var showPhotoViewer by rememberSaveable { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { vm.importPhoto(context.contentResolver, it) } }
@@ -57,6 +58,19 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
         }, onError = { message -> cameraOpen = false; vm.showError(message) })
         return
     }
+    fun requestClose() {
+        if (state.hasUnsavedChanges) confirmDiscard = true else onBack()
+    }
+    BackHandler(onBack = ::requestClose)
+    if (confirmDiscard) AlertDialog(
+        onDismissRequest = { confirmDiscard = false },
+        title = { Text("Discard this session?") },
+        text = { Text("Your unsaved changes will be lost.") },
+        confirmButton = {
+            TextButton(onClick = onBack) { Text("Discard", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") } },
+    )
     if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("Delete this session?") }, text = { Text("The workout record and its managed photos will be permanently removed.") }, confirmButton = {
         TextButton(onClick = { confirmDelete = false; vm.delete(onDeleted) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
     }, dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
@@ -97,7 +111,7 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { TopAppBar(title = { Text(if (vm.isEditing) "Edit session" else "New session") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.Outlined.Close, "Close editor") }
+            IconButton(onClick = ::requestClose) { Icon(Icons.Outlined.Close, "Close editor") }
         }, actions = {
             if (state.saving) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
             else Button(onClick = vm::save, modifier = Modifier.padding(end = 8.dp), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)) { Text("Save") }
@@ -129,8 +143,6 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
             item {
                 if (state.draft.photoFilename == null) {
                     Text("Whiteboard", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(10.dp))
-                    LocalPhoto(null, "No selected whiteboard photo", Modifier.fillMaxWidth().aspectRatio(16f / 10f).clip(RoundedCornerShape(20.dp)))
                 }
                 if (state.photoProcessing) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (state.whiteboardScanning) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -239,6 +251,7 @@ private fun MovementEditor(index: Int, movement: EditorMovement, vm: EditorViewM
         debouncedName = movement.name
     }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }
+    var noteExpanded by rememberSaveable(movement.id) { mutableStateOf(movement.note.isNotBlank()) }
     LaunchedEffect(debouncedName, candidates) {
         suggestions = if (movement.name == debouncedName) {
             withContext(Dispatchers.Default) { vm.rankSuggestions(debouncedName, candidates) }
@@ -262,9 +275,19 @@ private fun MovementEditor(index: Int, movement: EditorMovement, vm: EditorViewM
             if (movement.name.isNotBlank() && suggestions.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(suggestions) { suggestion -> SuggestionChip(onClick = { vm.updateMovement(index, movement.copy(name = suggestion)) }, label = { Text(suggestion) }) }
             }
-            TextField(movement.load, { vm.updateMovement(index, movement.copy(load = it)) }, Modifier.fillMaxWidth(), label = { Text("Load (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-            TextField(movement.result, { vm.updateMovement(index, movement.copy(result = it)) }, Modifier.fillMaxWidth(), label = { Text("Result (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-            TextField(movement.note, { vm.updateMovement(index, movement.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text("Note (optional)") }, shape = RoundedCornerShape(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                TextField(movement.load, { vm.updateMovement(index, movement.copy(load = it)) }, Modifier.weight(1f), label = { Text("Load") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                TextField(movement.result, { vm.updateMovement(index, movement.copy(result = it)) }, Modifier.weight(1f), label = { Text("Result") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+            }
+            if (noteExpanded || movement.note.isNotBlank()) {
+                TextField(movement.note, { vm.updateMovement(index, movement.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text("Note") }, shape = RoundedCornerShape(14.dp))
+            } else {
+                TextButton(onClick = { noteExpanded = true }) {
+                    Icon(Icons.Outlined.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add note")
+                }
+            }
         }
     }
 }

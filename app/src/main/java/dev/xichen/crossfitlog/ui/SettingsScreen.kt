@@ -161,7 +161,7 @@ fun SettingsScreen(backupService: BackupService, dataExportService: DataExportSe
             Text("Your data", style = MaterialTheme.typography.headlineMedium)
             Text("Export a summary or move your complete log to another device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            SettingsCard(Icons.Outlined.Share, "Share workout data", "Choose a time span, then save or copy a readable export. Photos are not included.") {
+            SettingsCard(Icons.Outlined.Share, "Export workout data", "Choose a time span, then save or copy a readable export. Photos are not included.") {
                 Button(onClick = { showRangeChoices = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(8.dp)); Text("Export selected data")
                 }
