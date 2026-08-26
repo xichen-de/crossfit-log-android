@@ -15,6 +15,10 @@ val keystoreProperties = Properties().apply {
 }
 val personalSigningConfigured = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
     .all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+val releaseVersionName = System.getenv("CROSSFIT_LOG_VERSION_NAME") ?: "1.0.0"
+val releaseVersionCode = System.getenv("CROSSFIT_LOG_VERSION_CODE")?.let { value ->
+    requireNotNull(value.toIntOrNull()) { "CROSSFIT_LOG_VERSION_CODE must be an integer" }
+} ?: 1
 
 android {
     namespace = "dev.xichen.crossfitlog"
@@ -24,8 +28,8 @@ android {
         applicationId = "dev.xichen.crossfitlog"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
