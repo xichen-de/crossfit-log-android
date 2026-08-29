@@ -1,11 +1,11 @@
 package dev.xichen.crossfitlog.ui
 
-import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -36,7 +36,12 @@ import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(backupService: BackupService, dataExportService: DataExportService, onBack: () -> Unit) {
+fun SettingsScreen(
+    backupService: BackupService,
+    dataExportService: DataExportService,
+    onBack: () -> Unit,
+    onRestoreSuccess: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -77,11 +82,15 @@ fun SettingsScreen(backupService: BackupService, dataExportService: DataExportSe
     val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null && !busy) scope.launch {
             busy = true
-            val message = runCatching { backupService.restore(uri).message() }.getOrElse(BackupCodec::friendlyFailure)
+            val result = runCatching { backupService.restore(uri) }
             busy = false
-            snackbar.showSnackbar(message)
-            // Restoring replaces the Room instance. Recreate to discard ViewModels holding the closed DAO.
-            (context as? Activity)?.recreate()
+            val report = result.getOrNull()
+            if (report != null) {
+                Toast.makeText(context, report.message(), Toast.LENGTH_SHORT).show()
+                onRestoreSuccess()
+            } else {
+                snackbar.showSnackbar(BackupCodec.friendlyFailure(result.exceptionOrNull()!!))
+            }
         }
     }
 

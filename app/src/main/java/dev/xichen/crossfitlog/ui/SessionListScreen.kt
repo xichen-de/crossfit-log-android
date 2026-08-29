@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
@@ -22,19 +21,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalContext
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import dev.xichen.crossfitlog.data.local.PhotoStore
 import dev.xichen.crossfitlog.domain.MovementRecord
 import dev.xichen.crossfitlog.domain.WorkoutSession
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionListScreen(
-    sessionsFlow: StateFlow<List<WorkoutSession>>, photoStore: PhotoStore,
+    sessionsFlow: Flow<PagingData<WorkoutSession>>, photoStore: PhotoStore,
     onNew: () -> Unit, onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: () -> Unit,
 ) {
-    val sessions by sessionsFlow.collectAsState()
+    val sessions = sessionsFlow.collectAsLazyPagingItems()
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { TopAppBar(title = { Text("CrossFit Log", style = MaterialTheme.typography.titleSmall) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background), actions = {
@@ -48,7 +50,7 @@ fun SessionListScreen(
             icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("New session") },
         ) },
     ) { padding ->
-        if (sessions.isEmpty()) Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+        if (sessions.itemCount == 0) Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                     Icon(Icons.Outlined.FitnessCenter, null, Modifier.padding(22.dp).size(34.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -63,15 +65,16 @@ fun SessionListScreen(
                 Text("Training log", style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "${sessions.size} session${if (sessions.size == 1) "" else "s"} recorded",
+                    "${sessions.itemCount} session${if (sessions.itemCount == 1) "" else "s"} recorded",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(24.dp))
                 Text("Recent sessions", style = MaterialTheme.typography.titleMedium)
             }
-            items(sessions, key = { it.id }) { session ->
-                SessionJournalCard(session, photoStore) { onOpen(session.id) }
+            items(sessions.itemCount, key = sessions.itemKey { it.id }) { index ->
+                val session = sessions[index]
+                if (session != null) SessionJournalCard(session, photoStore) { onOpen(session.id) }
             }
         }
     }
@@ -140,6 +143,6 @@ private fun SessionListPreview() {
         ),
     )
     dev.xichen.crossfitlog.ui.theme.CrossFitLogTheme {
-        SessionListScreen(MutableStateFlow(listOf(sample)), PhotoStore(LocalContext.current), {}, {}, {}, {})
+        SessionListScreen(flowOf(PagingData.from(listOf(sample))), PhotoStore(LocalContext.current), {}, {}, {}, {})
     }
 }

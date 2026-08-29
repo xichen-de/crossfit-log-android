@@ -1,6 +1,7 @@
 package dev.xichen.crossfitlog.ui
 
 import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -133,10 +135,21 @@ fun FullscreenPhotoViewer(file: File?, description: String, onDismiss: () -> Uni
     }
 }
 
+// Lazy lists dispose and recompose off-screen items, so without a cache every scroll back into
+// view would redecode the same JPEG from disk, causing GC churn and scroll jank.
+private val localImageCache = object : LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int = value.asAndroidBitmap().allocationByteCount
+}
+
 @Composable
 private fun rememberLocalImage(file: File?): ImageBitmap? {
     val image by produceState<ImageBitmap?>(null, file?.path, file?.lastModified()) {
-        value = withContext(Dispatchers.IO) { file?.takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() } }
+        value = file?.takeIf { it.exists() }?.let { f ->
+            val cacheKey = "${f.path}:${f.lastModified()}"
+            localImageCache.get(cacheKey) ?: withContext(Dispatchers.IO) {
+                BitmapFactory.decodeFile(f.path)?.asImageBitmap()
+            }?.also { localImageCache.put(cacheKey, it) }
+        }
     }
     return image
 }

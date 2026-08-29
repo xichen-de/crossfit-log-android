@@ -63,6 +63,21 @@ fun CrossFitLogApp(app: CrossFitLogApplication) {
             val vm: HistoryViewModel = viewModel(factory = viewModelFactory { initializer { HistoryViewModel(app.repository) } })
             HistoryScreen(vm, app.photoStore, { nav.popBackStack() }, { nav.navigate("details/$it") })
         }
-        composable("settings") { SettingsScreen(app.backupService, app.dataExportService, { nav.popBackStack() }) }
+        composable("settings") {
+            SettingsScreen(
+                app.backupService,
+                app.dataExportService,
+                onBack = { nav.popBackStack() },
+                onRestoreSuccess = {
+                    // The old list ViewModel owns a Paging source backed by the Room instance that
+                    // restore just closed. Replace its back-stack entry so a new ViewModel obtains
+                    // a repository for the newly installed database.
+                    nav.navigate("sessions") {
+                        popUpTo("sessions") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
     }
 }

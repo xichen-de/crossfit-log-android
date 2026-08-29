@@ -1,5 +1,6 @@
 package dev.xichen.crossfitlog.ui.theme
 
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -8,6 +9,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -72,6 +74,9 @@ fun CrossFitLogTheme(content: @Composable () -> Unit) {
         colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
         typography = AppTypography,
         shapes = AppShapes,
-        content = content,
-    )
+    ) {
+        // The platform stretch-overscroll effect reads as a jarring "bounce" at the end of our
+        // short lists; a plain clip-on-overscroll feels smoother and matches the rest of the UI.
+        CompositionLocalProvider(LocalOverscrollFactory provides null, content = content)
+    }
 }

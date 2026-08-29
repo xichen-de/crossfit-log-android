@@ -1,5 +1,6 @@
 package dev.xichen.crossfitlog.data.local
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
@@ -13,6 +14,10 @@ abstract class WorkoutDao {
     @Transaction
     @Query("SELECT * FROM workout_sessions ORDER BY session_time DESC, created_at DESC")
     abstract fun observeSessions(): Flow<List<SessionWithMovements>>
+
+    @Transaction
+    @Query("SELECT * FROM workout_sessions ORDER BY session_time DESC, created_at DESC")
+    abstract fun pagingSource(): PagingSource<Int, SessionWithMovements>
 
     @Transaction
     @Query("SELECT * FROM workout_sessions WHERE id = :id")

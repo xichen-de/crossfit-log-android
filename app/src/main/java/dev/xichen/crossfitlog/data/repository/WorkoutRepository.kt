@@ -1,5 +1,9 @@
 package dev.xichen.crossfitlog.data.repository
 
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import dev.xichen.crossfitlog.data.local.MovementRecordEntity
 import dev.xichen.crossfitlog.data.local.SessionWithMovements
 import dev.xichen.crossfitlog.data.local.WorkoutDao
@@ -19,6 +23,11 @@ import kotlinx.coroutines.withContext
 
 class WorkoutRepository(private val dao: WorkoutDao, private val movementMatcher: MovementMatcher = MovementMatcher()) {
     fun observeSessions(): Flow<List<WorkoutSession>> = dao.observeSessions().map { rows -> rows.map(::toDomain) }
+
+    fun pagedSessions(): Flow<PagingData<WorkoutSession>> =
+        Pager(PagingConfig(pageSize = 30, enablePlaceholders = false)) { dao.pagingSource() }
+            .flow
+            .map { page -> page.map(::toDomain) }
     fun observeSession(id: String): Flow<WorkoutSession?> = dao.observeSession(id).map { it?.let(::toDomain) }
     suspend fun getSession(id: String): WorkoutSession? = dao.getSession(id)?.let(::toDomain)
     suspend fun getAllSessions(): List<WorkoutSession> = dao.getAllSessions().map(::toDomain)
