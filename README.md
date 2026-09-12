@@ -32,6 +32,7 @@ CrossFit Log is a local Android app for recording and reviewing CrossFit workout
 - Flexible workout sessions with movements, loads, results, and notes
 - Whiteboard photo capture with offline movement-name scanning
 - Duplicate, edit, delete, and search previous sessions
+- Share an individual session as JSON directly from the session view
 - Export workout data or create a complete migration backup
 - Fully offline operation with no accounts, ads, analytics, or network permission
 

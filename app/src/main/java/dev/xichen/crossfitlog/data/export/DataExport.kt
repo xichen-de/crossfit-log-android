@@ -109,6 +109,13 @@ object DataExportCodec {
         )
     }
 
+    fun buildSession(session: WorkoutSession, exportedAt: Long = System.currentTimeMillis()): CrossFitDataExport =
+        build(
+            listOf(session),
+            DataExportRange("Single session", "session", session.sessionTime, session.sessionTime),
+            exportedAt,
+        )
+
     fun encode(value: CrossFitDataExport): String = json.encodeToString(value)
 }
 

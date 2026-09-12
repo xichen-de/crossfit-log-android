@@ -31,6 +31,20 @@ class DataExportCodecTest {
         assertFalse(encoded.contains("late.jpg"))
     }
 
+    @Test fun singleSessionExportPreservesDetailsEvenForFutureSessions() {
+        val session = session("selected", 4_000_000_000_000, "Clean", "private.jpg").copy(
+            sessionNote = "Quotes: \"heavy\"\nNext line 🏋️",
+        )
+        val value = DataExportCodec.buildSession(session, exportedAt = 400)
+        val decoded = kotlinx.serialization.json.Json.decodeFromString<CrossFitDataExport>(DataExportCodec.encode(value))
+        assertEquals(1, decoded.sessionCount)
+        assertEquals(1, decoded.movementCount)
+        assertEquals("selected", decoded.sessions.single().id)
+        assertEquals(session.sessionNote, decoded.sessions.single().sessionNote)
+        assertEquals(ExportMovement("Clean", "60 kg", "5", "note"), decoded.sessions.single().movements.single())
+        assertFalse(DataExportCodec.encode(value).contains("private.jpg"))
+    }
+
     @Test fun customRangeIncludesTheEntireLocalEndDay() {
         val zone = ZoneId.of("Europe/Berlin")
         val range = customDataExportRange(LocalDate.of(2026, 3, 28), LocalDate.of(2026, 3, 29), zone)

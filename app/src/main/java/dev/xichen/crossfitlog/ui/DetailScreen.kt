@@ -1,6 +1,11 @@
 package dev.xichen.crossfitlog.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.outlined.Share
+import dev.xichen.crossfitlog.data.export.prepareSessionShare
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,8 +37,27 @@ fun DetailScreen(
     onDuplicate: () -> Unit,
 ) {
     val session by sessionFlow.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    var sharing by remember { mutableStateOf(false) }
     var showPhotoViewer by remember { mutableStateOf(false) }
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { TopAppBar(title = { Text("Session") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } }, actions = {
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background, topBar = { TopAppBar(title = { Text("Session") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } }, actions = {
+        IconButton(enabled = session != null && !sharing, onClick = {
+            val value = session ?: return@IconButton
+            sharing = true
+            scope.launch {
+                try {
+                    context.startActivity(prepareSessionShare(context, value))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    snackbar.showSnackbar("Could not share this session. Please try again.")
+                } finally {
+                    sharing = false
+                }
+            }
+        }) { Icon(Icons.Outlined.Share, "Share session as JSON") }
         TextButton(onClick = onDuplicate) {
             Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp))
             Spacer(Modifier.width(5.dp))
