@@ -84,6 +84,29 @@ class BackupCodecTest {
         assertTrue(BackupCodec.safeZipPath("photos/photo.jpg"))
     }
 
+    @Test fun aliasedZipEntryIsRejectedBeforeOverwritingExtractedFile() {
+        val archive = ByteArrayOutputStream().also { output ->
+            ZipOutputStream(output).use { zip ->
+                zip.putNextEntry(ZipEntry("photos/photo.jpg"))
+                zip.write("original".encodeToByteArray())
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("photos/./photo.jpg"))
+                zip.write("overwritten".encodeToByteArray())
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        val destination = temporaryFolder.newFolder("aliased")
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupCodec.extractAndValidate(ByteArrayInputStream(archive), destination)
+        }
+        assertEquals("original", File(destination, "photos/photo.jpg").readText())
+    }
+
+    @Test fun zipPathsMustUseCanonicalRelativeComponents() {
+        listOf(".", "./database.sqlite", "photos/./photo.jpg", "photos//photo.jpg", "photos/", "photos\\photo.jpg")
+            .forEach { assertFalse(it, BackupCodec.safeZipPath(it)) }
+    }
+
     private fun manifest(root: File, paths: List<String>) = BackupManifest(
         BACKUP_FORMAT, BACKUP_VERSION, 123, "test", 1, paths.map { BackupCodec.describeFile(root, it) },
     )

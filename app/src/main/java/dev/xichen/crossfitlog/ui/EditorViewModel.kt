@@ -49,7 +49,9 @@ data class EditorUiState(
     val error: String? = null,
     val saved: Boolean = false,
     val hasUnsavedChanges: Boolean = false,
-)
+) {
+    val canSave: Boolean get() = !loading && !saving && !saved && !photoProcessing && !whiteboardScanning
+}
 
 class EditorViewModel(
     private val savedState: SavedStateHandle,
@@ -121,6 +123,7 @@ class EditorViewModel(
     fun clearError() = _state.update { it.copy(error = null) }
     fun showError(message: String) = _state.update { it.copy(error = message) }
     fun removePhoto() {
+        if (!_state.value.canSave) return
         val current = _state.value.draft
         if (current.photoFilename != originalPhotoFilename || current.thumbnailFilename != originalThumbnailFilename) {
             photoStore.deleteNow(current.photoFilename, current.thumbnailFilename)
@@ -137,7 +140,7 @@ class EditorViewModel(
     fun rankSuggestions(text: String, candidates: List<String>): List<String> = repository.rankSuggestions(text, candidates)
 
     fun importPhoto(resolver: ContentResolver, uri: Uri) {
-        if (_state.value.photoProcessing) return
+        if (!_state.value.canSave) return
         viewModelScope.launch {
             _state.update { it.copy(photoProcessing = true, error = null) }
             val previousPhoto = _state.value.draft.photoFilename
@@ -164,7 +167,7 @@ class EditorViewModel(
     }
 
     fun scanWhiteboard() {
-        if (_state.value.whiteboardScanning) return
+        if (!_state.value.canSave) return
         val draft = _state.value.draft
         val photo = photoStore.ocrSourceFile(draft.ocrSourceFilename)
             ?: photoFile()
@@ -218,16 +221,16 @@ class EditorViewModel(
 
     fun save() {
         val current = _state.value
-        if (current.saved || !saveGuard.tryStart()) return
+        if (!current.canSave || !saveGuard.tryStart()) return
         val invalid = current.draft.movements.indexOfFirst { !isMovementNameValid(it.name) }
         if (invalid >= 0) { saveGuard.reset(); _state.update { it.copy(error = "Movement ${invalid + 1} needs a name.") }; return }
         _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
             runCatching {
-                val domain = _state.value.draft.toDomain()
+                val domain = current.draft.toDomain()
                 if (existingId == null) repository.create(domain) else repository.update(domain)
             }.onSuccess {
-                val savedDraft = _state.value.draft
+                val savedDraft = current.draft
                 if (savedDraft.photoFilename != originalPhotoFilename || savedDraft.thumbnailFilename != originalThumbnailFilename) {
                     photoStore.delete(originalPhotoFilename, originalThumbnailFilename)
                     originalPhotoFilename = savedDraft.photoFilename
@@ -247,6 +250,7 @@ class EditorViewModel(
     }
 
     fun delete(onDeleted: () -> Unit) {
+        if (!_state.value.canSave) return
         val sessionId = existingId ?: return
         viewModelScope.launch {
             val session = repository.getSession(sessionId)
@@ -280,7 +284,11 @@ class EditorViewModel(
         super.onCleared()
     }
 
-    private fun mutate(block: EditorDraft.() -> EditorDraft) = update(_state.value.draft.block(), persist = true, markChanged = true)
+    private fun mutate(block: EditorDraft.() -> EditorDraft) {
+        val current = _state.value
+        if (current.loading || current.saving || current.saved) return
+        update(current.draft.block(), persist = true, markChanged = true)
+    }
     private fun update(draft: EditorDraft, persist: Boolean, markChanged: Boolean = false) {
         _state.update { it.copy(draft = draft, loading = false, hasUnsavedChanges = it.hasUnsavedChanges || markChanged) }
         if (persist) persist(draft, _state.value.hasUnsavedChanges)

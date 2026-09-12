@@ -31,9 +31,9 @@ object BackupCodec {
     }
 
     fun safeZipPath(name: String): Boolean {
-        if (name.isBlank() || name.startsWith('/') || name.startsWith('\\')) return false
+        if (name.isBlank() || name.startsWith('/') || name.contains('\\')) return false
         val parts = name.replace('\\', '/').split('/')
-        return parts.none { it == ".." || it.isBlank() } && !name.contains(':')
+        return parts.none { it == "." || it == ".." || it.isBlank() } && !name.contains(':')
     }
 
     fun friendlyFailure(error: Throwable): String = when (error) {
@@ -75,7 +75,7 @@ object BackupCodec {
                 } else {
                     val target = File(destination, entry.name)
                     target.parentFile?.mkdirs()
-                    target.outputStream().use { totalBytes += zip.copyLimited(it, MAX_ENTRY_BYTES) }
+                    target.outputStream().use { totalBytes += zip.copyLimited(it, minOf(MAX_ENTRY_BYTES, MAX_ARCHIVE_BYTES - totalBytes)) }
                     require(totalBytes <= MAX_ARCHIVE_BYTES) { "The backup is too large." }
                     extracted[entry.name] = target
                 }

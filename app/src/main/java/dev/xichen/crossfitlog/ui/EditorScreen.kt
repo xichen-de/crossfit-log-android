@@ -59,6 +59,7 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
         return
     }
     fun requestClose() {
+        if (state.saving) return
         if (state.hasUnsavedChanges) confirmDiscard = true else onBack()
     }
     BackHandler(onBack = ::requestClose)
@@ -111,10 +112,10 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { TopAppBar(title = { Text(if (vm.isEditing) "Edit session" else "New session") }, navigationIcon = {
-            IconButton(onClick = ::requestClose) { Icon(Icons.Outlined.Close, "Close editor") }
+            IconButton(onClick = ::requestClose, enabled = !state.saving) { Icon(Icons.Outlined.Close, "Close editor") }
         }, actions = {
             if (state.saving) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-            else Button(onClick = vm::save, modifier = Modifier.padding(end = 8.dp), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)) { Text("Save") }
+            else Button(onClick = vm::save, enabled = state.canSave, modifier = Modifier.padding(end = 8.dp), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)) { Text("Save") }
         }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)) },
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.background) {

@@ -144,12 +144,16 @@ class PhotoStore(private val context: Context) {
         val largest = maxOf(source.width, source.height)
         if (largest <= maxDimension) return source
         val scale = maxDimension.toFloat() / largest
-        return Bitmap.createScaledBitmap(source, (source.width * scale).toInt(), (source.height * scale).toInt(), true)
+        return Bitmap.createScaledBitmap(source, (source.width * scale).toInt().coerceAtLeast(1), (source.height * scale).toInt().coerceAtLeast(1), true)
     }
 
     private fun writeJpegAtomically(bitmap: Bitmap, target: File, quality: Int) {
         val temp = File(target.parentFile, ".${target.name}.tmp")
-        FileOutputStream(temp).use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it)) }
-        check(temp.renameTo(target)) { "Could not store the image." }
+        try {
+            FileOutputStream(temp).use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it)) }
+            check(temp.renameTo(target)) { "Could not store the image." }
+        } finally {
+            temp.delete()
+        }
     }
 }
