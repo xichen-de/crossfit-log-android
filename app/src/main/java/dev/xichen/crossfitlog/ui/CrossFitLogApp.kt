@@ -1,6 +1,8 @@
 package dev.xichen.crossfitlog.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
@@ -10,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import dev.xichen.crossfitlog.BuildConfig
 import dev.xichen.crossfitlog.CrossFitLogApplication
 
 @Composable
@@ -18,7 +21,15 @@ fun CrossFitLogApp(app: CrossFitLogApplication) {
     NavHost(nav, startDestination = "sessions") {
         composable("sessions") {
             val vm: SessionsViewModel = viewModel(factory = viewModelFactory { initializer { SessionsViewModel(app.repository) } })
-            SessionListScreen(vm.sessions, app.photoStore, { nav.navigate("editor/new") }, { nav.navigate("details/$it") }, { nav.navigate("history") }, { nav.navigate("settings") })
+            val sessionCount by vm.sessionCount.collectAsState()
+            SessionListScreen(
+                vm.sessions, app.photoStore,
+                onNew = { nav.navigate("editor/new") },
+                onOpen = { nav.navigate("details/$it") },
+                onHistory = { nav.navigate("history") },
+                onSettings = { nav.navigate("settings") },
+                sessionCount = sessionCount,
+            )
         }
         composable("editor/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             val rawId = entry.arguments?.getString("id") ?: "new"
@@ -60,13 +71,15 @@ fun CrossFitLogApp(app: CrossFitLogApplication) {
             )
         }
         composable("history") {
-            val vm: HistoryViewModel = viewModel(factory = viewModelFactory { initializer { HistoryViewModel(app.repository) } })
+            val vm: HistoryViewModel = viewModel(factory = viewModelFactory { initializer { HistoryViewModel(createSavedStateHandle(), app.repository) } })
             HistoryScreen(vm, app.photoStore, { nav.popBackStack() }, { nav.navigate("details/$it") })
         }
         composable("settings") {
+            val vm: SettingsViewModel = viewModel(factory = viewModelFactory {
+                initializer { SettingsViewModel(app.backupService, app.dataExportService, BuildConfig.VERSION_NAME) }
+            })
             SettingsScreen(
-                app.backupService,
-                app.dataExportService,
+                vm,
                 onBack = { nav.popBackStack() },
                 onRestoreSuccess = {
                     // The old list ViewModel owns a Paging source backed by the Room instance that

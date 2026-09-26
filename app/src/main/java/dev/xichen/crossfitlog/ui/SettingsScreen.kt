@@ -4,7 +4,6 @@ import android.app.DatePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,15 +20,12 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.xichen.crossfitlog.BuildConfig
-import dev.xichen.crossfitlog.data.backup.BackupCodec
-import dev.xichen.crossfitlog.data.backup.BackupService
-import dev.xichen.crossfitlog.data.backup.PreparedBackup
 import dev.xichen.crossfitlog.data.export.*
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -37,59 +33,36 @@ import java.time.ZoneId
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    backupService: BackupService,
-    dataExportService: DataExportService,
+    vm: SettingsViewModel,
     onBack: () -> Unit,
     onRestoreSuccess: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var busy by remember { mutableStateOf(false) }
-    var showRangeChoices by remember { mutableStateOf(false) }
+    val busy by vm.busy.collectAsState()
+    var showRangeChoices by rememberSaveable { mutableStateOf(false) }
     var chosenRange by remember { mutableStateOf<DataExportRange?>(null) }
-    var fileRange by remember { mutableStateOf<DataExportRange?>(null) }
-    var preparedBackup by remember { mutableStateOf<PreparedBackup?>(null) }
-    var showRestoreConfirmation by remember { mutableStateOf(false) }
+    var showRestoreConfirmation by rememberSaveable { mutableStateOf(false) }
 
-    DisposableEffect(backupService) {
-        onDispose { backupService.discard(preparedBackup) }
-    }
+    val dataExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json"), vm::exportToFile)
+    val backupExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip"), vm::saveBackup)
+    val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), vm::restore)
 
-    fun runOperation(block: suspend () -> String) {
-        if (!busy) scope.launch {
-            busy = true
-            val message = runCatching { block() }.getOrElse(BackupCodec::friendlyFailure)
-            busy = false
-            snackbar.showSnackbar(message)
-        }
-    }
-
-    val dataExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
-        val range = fileRange
-        fileRange = null
-        if (uri != null && range != null) runOperation {
-            val result = dataExportService.export(uri, range)
-            "Exported ${result.sessionCount} session${if (result.sessionCount == 1) "" else "s"}."
-        }
-    }
-    val backupExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
-        val prepared = preparedBackup
-        preparedBackup = null
-        if (uri != null && prepared != null) runOperation { backupService.save(prepared, uri); "Backup saved." }
-        else backupService.discard(prepared)
-    }
-    val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null && !busy) scope.launch {
-            busy = true
-            val result = runCatching { backupService.restore(uri) }
-            busy = false
-            val report = result.getOrNull()
-            if (report != null) {
-                Toast.makeText(context, report.message(), Toast.LENGTH_SHORT).show()
-                onRestoreSuccess()
-            } else {
-                snackbar.showSnackbar(BackupCodec.friendlyFailure(result.exceptionOrNull()!!))
+    LaunchedEffect(vm) {
+        vm.events.collect { event ->
+            when (event) {
+                is SettingsEvent.Message -> snackbar.showSnackbar(event.text)
+                is SettingsEvent.LaunchBackupSave -> backupExport.launch(event.suggestedFilename)
+                is SettingsEvent.CopyExport -> {
+                    context.getSystemService(ClipboardManager::class.java)
+                        .setPrimaryClip(ClipData.newPlainText("CrossFit data export", event.export.content))
+                    snackbar.showSnackbar("Copied ${sessionsLabel(event.export.sessionCount)}.")
+                }
+                is SettingsEvent.Restored -> {
+                    clearLocalImageCache()
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                    onRestoreSuccess()
+                }
             }
         }
     }
@@ -133,7 +106,7 @@ fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("The export includes workout details and notes. Photos are omitted.")
                     Button(onClick = {
-                        fileRange = range
+                        vm.beginFileExport(range)
                         chosenRange = null
                         dataExport.launch(dataExportFileName(range))
                     }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
@@ -141,12 +114,7 @@ fun SettingsScreen(
                     }
                     OutlinedButton(onClick = {
                         chosenRange = null
-                        runOperation {
-                            val result = dataExportService.prepare(range)
-                            context.getSystemService(ClipboardManager::class.java)
-                                .setPrimaryClip(ClipData.newPlainText("CrossFit data export", result.content))
-                            "Copied ${result.sessionCount} session${if (result.sessionCount == 1) "" else "s"}."
-                        }
+                        vm.copyExport(range)
                     }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Outlined.ContentCopy, null); Spacer(Modifier.width(8.dp)); Text("Copy JSON")
                     }
@@ -177,21 +145,7 @@ fun SettingsScreen(
             }
 
             SettingsCard(Icons.Outlined.Restore, "Backup & restore", "Save a complete database and every workout image to any location offered by Android, including cloud drives.") {
-                OutlinedButton(onClick = {
-                    if (!busy) scope.launch {
-                        busy = true
-                        runCatching { backupService.prepare(BuildConfig.VERSION_NAME) }
-                            .onSuccess {
-                                preparedBackup = it
-                                busy = false
-                                backupExport.launch(it.suggestedFilename)
-                            }
-                            .onFailure {
-                                busy = false
-                                snackbar.showSnackbar(BackupCodec.friendlyFailure(it))
-                            }
-                    }
-                }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = vm::createBackup, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Create backup")
                 }
                 OutlinedButton(onClick = { showRestoreConfirmation = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {

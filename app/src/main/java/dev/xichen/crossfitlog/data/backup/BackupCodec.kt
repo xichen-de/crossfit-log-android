@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.security.DigestInputStream
 import java.security.MessageDigest
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -36,10 +37,10 @@ object BackupCodec {
         return parts.none { it == "." || it == ".." || it.isBlank() } && !name.contains(':')
     }
 
-    fun friendlyFailure(error: Throwable): String = when (error) {
+    fun friendlyFailure(error: Throwable, fallback: String = "The backup could not be read."): String = when (error) {
         is SerializationException -> "The backup contains malformed data."
-        is IllegalArgumentException -> error.message ?: "The backup is invalid."
-        else -> "The backup could not be read."
+        is IllegalArgumentException -> error.message ?: fallback
+        else -> fallback
     }
 
     fun writeArchive(output: OutputStream, root: File, manifest: BackupManifest) {
@@ -51,6 +52,8 @@ object BackupCodec {
             manifest.files.forEach { item ->
                 val source = File(root, item.path)
                 require(source.isFile && source.length() == item.size) { "A backup source file changed while it was being archived." }
+                // JPEGs are already compressed; deflating them costs CPU time without saving space.
+                zip.setLevel(if (item.path.endsWith(".jpg", ignoreCase = true)) Deflater.NO_COMPRESSION else Deflater.DEFAULT_COMPRESSION)
                 zip.putNextEntry(ZipEntry(item.path))
                 val digest = MessageDigest.getInstance("SHA-256")
                 DigestInputStream(source.inputStream(), digest).use { it.copyTo(zip) }

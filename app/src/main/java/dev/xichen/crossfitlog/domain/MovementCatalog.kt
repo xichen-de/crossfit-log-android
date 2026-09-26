@@ -102,10 +102,7 @@ private fun resolveCatalogAlias(
     val historyCompact = historyNormalized.replace(" ", "")
     val historyWordCount = historyNormalized.split(' ').count(String::isNotBlank)
     val ranked = matcher.rank(historyName, catalog)
-        .filter { match ->
-            val candidateNormalized = normalizeForMatching(match.movement)
-            match.exact || candidateNormalized.split(' ').count(String::isNotBlank) == historyWordCount
-        }
+        .filter { match -> match.exact || match.wordCount == historyWordCount }
         .sortedWith(compareByDescending<MovementMatch> { it.exact }.thenByDescending { it.score })
     val best = ranked.firstOrNull() ?: return null
     if (best.exact) return best.movement

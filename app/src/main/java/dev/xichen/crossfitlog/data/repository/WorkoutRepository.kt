@@ -22,16 +22,24 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class WorkoutRepository(private val dao: WorkoutDao, private val movementMatcher: MovementMatcher = MovementMatcher()) {
-    fun observeSessions(): Flow<List<WorkoutSession>> = dao.observeSessions().map { rows -> rows.map(::toDomain) }
-
     fun pagedSessions(): Flow<PagingData<WorkoutSession>> =
         Pager(PagingConfig(pageSize = 30, enablePlaceholders = false)) { dao.pagingSource() }
             .flow
             .map { page -> page.map(::toDomain) }
+    fun observeSessionCount(): Flow<Int> = dao.observeSessionCount()
     fun observeSession(id: String): Flow<WorkoutSession?> = dao.observeSession(id).map { it?.let(::toDomain) }
     suspend fun getSession(id: String): WorkoutSession? = dao.getSession(id)?.let(::toDomain)
-    suspend fun getAllSessions(): List<WorkoutSession> = dao.getAllSessions().map(::toDomain)
-    suspend fun exists(id: String): Boolean = dao.sessionExists(id)
+
+    /** Sessions in the inclusive range, oldest first; a null start means the beginning of history. */
+    suspend fun getSessionsBetween(startInclusive: Long?, endInclusive: Long): List<WorkoutSession> =
+        dao.getSessionsBetween(startInclusive ?: Long.MIN_VALUE, endInclusive).map(::toDomain)
+
+    fun observeSessionsBetween(startInclusive: Long, endInclusive: Long): Flow<List<WorkoutSession>> =
+        dao.observeSessionsBetween(startInclusive, endInclusive).map { rows -> rows.map(::toDomain) }
+
+    suspend fun latestSessionTime(): Long? = dao.latestSessionTime()
+    fun observeLatestSessionTimeBefore(before: Long): Flow<Long?> = dao.observeLatestSessionTimeBefore(before)
+    fun observeEarliestSessionTimeAfter(after: Long): Flow<Long?> = dao.observeEarliestSessionTimeAfter(after)
 
     fun search(query: String): Flow<List<MovementSearchResult>> {
         val normalizedQuery = normalizeMovementName(query)

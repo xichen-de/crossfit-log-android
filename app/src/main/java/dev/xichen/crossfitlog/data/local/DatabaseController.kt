@@ -17,6 +17,7 @@ data class DatabaseSnapshot(
 class DatabaseController(private val context: Context) {
     private val maintenance = Mutex()
     private val databaseFile get() = context.getDatabasePath(DATABASE_NAME)
+    private val walFile get() = File(databaseFile.path + "-wal")
     private val livePhotos get() = File(context.filesDir, "photos")
     private val rollbackDir get() = File(context.filesDir, ROLLBACK_DIRECTORY)
     @Volatile private var instance: CrossFitDatabase? = null
@@ -32,13 +33,17 @@ class DatabaseController(private val context: Context) {
             withContext(Dispatchers.IO) {
                 val room = database()
                 val sqlite = room.openHelper.writableDatabase
-                sqlite.query("PRAGMA wal_checkpoint(FULL)").use { cursor ->
+                sqlite.query("PRAGMA wal_checkpoint(TRUNCATE)").use { cursor ->
                     check(cursor.moveToFirst() && cursor.getInt(0) == 0 && cursor.getInt(1) == cursor.getInt(2)) {
                         "The database was busy and could not be checkpointed."
                     }
                 }
                 var result: DatabaseSnapshot? = null
                 room.withTransaction {
+                    // Only the main database file is copied. A commit that landed between the
+                    // checkpoint and this transaction would exist only in the WAL, leaving the copy
+                    // without a session whose photo is still listed below.
+                    check(walFile.length() == 0L) { "The database was busy and could not be checkpointed." }
                     val photos = sqlite.query(
                         "SELECT photo_filename, thumbnail_filename FROM workout_sessions WHERE photo_filename IS NOT NULL OR thumbnail_filename IS NOT NULL",
                     ).use { cursor ->

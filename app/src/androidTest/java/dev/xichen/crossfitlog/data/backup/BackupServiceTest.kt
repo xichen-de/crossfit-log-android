@@ -19,7 +19,7 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class BackupServiceTest {
-    @Test fun databaseAndPhotosSurviveBackupAndRestore() = runBlocking {
+    @Test fun databaseAndPhotosSurviveBackupAndRestore(): Unit = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(DatabaseController.DATABASE_NAME)
         File(context.filesDir, "photos").deleteRecursively()

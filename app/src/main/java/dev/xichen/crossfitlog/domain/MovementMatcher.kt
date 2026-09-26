@@ -7,36 +7,55 @@ data class MovementMatch(
     val score: Double,
     val exact: Boolean,
     val prefix: Boolean,
+    val wordCount: Int,
 )
 
 /** Shared movement-name ranking used by editor autocomplete and whiteboard OCR. */
 class MovementMatcher {
     private val similarity = JaroWinklerSimilarity()
 
+    private class Candidate(val movement: String, val normalized: String, val compact: String, val spaces: Int, val wordCount: Int)
+
+    // Callers rank many queries against the same list instance (every OCR fragment, every
+    // keystroke), so normalizing candidates once per list avoids redundant work.
+    @Volatile private var prepared: Pair<Collection<String>, List<Candidate>>? = null
+
+    private fun prepare(candidates: Collection<String>): List<Candidate> {
+        prepared?.let { (source, result) -> if (source === candidates) return result }
+        val result = candidates.asSequence()
+            .filter { it.isNotBlank() }
+            .distinctBy(::normalizeMovementName)
+            .map { candidate ->
+                val normalized = normalizeForMatching(candidate)
+                val spaces = normalized.count { it == ' ' }
+                Candidate(candidate, normalized, normalized.replace(" ", ""), spaces, if (normalized.isEmpty()) 0 else spaces + 1)
+            }
+            .toList()
+        prepared = candidates to result
+        return result
+    }
+
     fun rank(query: String, candidates: Collection<String>): List<MovementMatch> {
         val normalizedQuery = normalizeForMatching(query)
         if (normalizedQuery.isBlank()) return emptyList()
         val queryCompact = normalizedQuery.replace(" ", "")
-        return candidates.asSequence()
-            .filter { it.isNotBlank() }
-            .distinctBy(::normalizeMovementName)
+        val queryVariants = listOf(normalizedQuery, normalizedQuery.replace('i', 'l')).distinct()
+        return prepare(candidates).asSequence()
             .map { candidate ->
-                val normalizedCandidate = normalizeForMatching(candidate)
-                val candidateCompact = normalizedCandidate.replace(" ", "")
-                val exact = normalizedQuery == normalizedCandidate || queryCompact == candidateCompact
-                val queryVariants = listOf(normalizedQuery, normalizedQuery.replace('i', 'l')).distinct()
-                val score = queryVariants.maxOf { variant ->
-                    val spaced = similarity.apply(variant, normalizedCandidate)
-                    val compact = if (variant.count { it == ' ' } == normalizedCandidate.count { it == ' ' }) {
-                        similarity.apply(variant.replace(" ", ""), candidateCompact)
+                val exact = normalizedQuery == candidate.normalized || queryCompact == candidate.compact
+                val score = if (exact) 1.0 else queryVariants.maxOf { variant ->
+                    val spaced = similarity.apply(variant, candidate.normalized)
+                    val compact = if (variant.count { it == ' ' } == candidate.spaces) {
+                        similarity.apply(variant.replace(" ", ""), candidate.compact)
                     } else 0.0
                     maxOf(spaced, compact)
                 }
                 MovementMatch(
-                    movement = candidate,
-                    score = if (exact) 1.0 else score,
+                    movement = candidate.movement,
+                    score = score,
                     exact = exact,
-                    prefix = normalizedCandidate.startsWith(normalizedQuery) || candidateCompact.startsWith(queryCompact),
+                    prefix = candidate.normalized.startsWith(normalizedQuery) || candidate.compact.startsWith(queryCompact),
+                    wordCount = candidate.wordCount,
                 )
             }
             .sortedWith(

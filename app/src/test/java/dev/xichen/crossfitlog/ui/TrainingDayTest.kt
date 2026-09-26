@@ -1,18 +1,26 @@
 package dev.xichen.crossfitlog.ui
 
-import dev.xichen.crossfitlog.domain.WorkoutSession
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
 
 class TrainingDayTest {
     private val zone = ZoneId.of("Europe/Berlin")
-    private fun millis(day: Int, hour: Int) = LocalDate.of(2026, 8, day).atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()
-    private fun session(id: String, time: Long) = WorkoutSession(id, time, "", null, null, time, time, emptyList())
+    private fun millis(day: Int, hour: Int, month: Int = 8) = LocalDate.of(2026, month, day).atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()
 
-    @Test fun sessionsAreFilteredByLocalCalendarDay() {
-        val sessions = listOf(session("early", millis(15, 1)), session("late", millis(15, 23)), session("other", millis(16, 1)))
-        assertEquals(listOf("early", "late"), sessionsOnDay(sessions, millis(15, 12), zone).map { it.id })
+    @Test fun dayBoundsCoverTheLocalCalendarDay() {
+        val day = dayBounds(LocalDate.of(2026, 8, 15), zone)
+        assertTrue(millis(15, 0) in day)
+        assertTrue(millis(15, 23) in day)
+        assertFalse(millis(16, 0) in day)
+        assertFalse(millis(14, 23) in day)
+    }
+
+    @Test fun dayBoundsFollowDaylightSavingChanges() {
+        val shortDay = dayBounds(LocalDate.of(2026, 3, 29), zone)
+        assertEquals(23 * 60 * 60 * 1000L, shortDay.last - shortDay.first + 1)
     }
 }

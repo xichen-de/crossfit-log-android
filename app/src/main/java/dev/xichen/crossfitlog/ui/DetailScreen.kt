@@ -68,7 +68,7 @@ fun DetailScreen(
         val value = session
         if (value == null) Box(Modifier.fillMaxSize().padding(padding)) { CircularProgressIndicator(Modifier.padding(32.dp)) }
         else {
-            val photoFile = photoStore.photoFile(value.photoFilename)
+            val photoFile = photoStore.photoLocation(value.photoFilename)
             LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 40.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
             item {
                 Column {
@@ -137,7 +137,7 @@ fun DetailScreen(
         }
         }
     }
-    if (showPhotoViewer) FullscreenPhotoViewer(photoStore.photoFile(session?.photoFilename), "Whiteboard photo", onDismiss = { showPhotoViewer = false })
+    if (showPhotoViewer) FullscreenPhotoViewer(photoStore.photoLocation(session?.photoFilename), "Whiteboard photo", onDismiss = { showPhotoViewer = false })
 }
 
 @Composable private fun DetailMetric(label: String, value: String, modifier: Modifier = Modifier) {

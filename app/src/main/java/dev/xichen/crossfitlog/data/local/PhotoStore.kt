@@ -26,6 +26,8 @@ class PhotoStore(private val context: Context) {
         const val PHOTO_JPEG_QUALITY = 84
         const val THUMBNAIL_MAX_DIMENSION = 480
         const val THUMBNAIL_JPEG_QUALITY = 78
+        const val CAMERA_FILE_PREFIX = "camera-"
+        const val STALE_OCR_SOURCE_MILLIS = 7L * 24 * 60 * 60 * 1000
     }
 
     private val photos = File(context.filesDir, "photos").apply { mkdirs() }
@@ -33,10 +35,21 @@ class PhotoStore(private val context: Context) {
     private val ocrSources = File(context.cacheDir, "whiteboard-ocr").apply { mkdirs() }
     val rootDirectory: File get() = photos
 
-    fun photoFile(filename: String?): File? = filename?.let { File(photos, File(it).name) }?.takeIf(File::exists)
-    fun thumbnailFile(filename: String?): File? = filename?.let { File(thumbnails, File(it).name) }?.takeIf(File::exists)
+    init {
+        // Captures are imported (and deleted) within one process, so any left over are orphans.
+        // OCR sources can belong to a draft restored after process death, so only old ones go.
+        context.cacheDir.listFiles { file -> file.name.startsWith(CAMERA_FILE_PREFIX) }?.forEach(File::delete)
+        val cutoff = System.currentTimeMillis() - STALE_OCR_SOURCE_MILLIS
+        ocrSources.listFiles { file -> file.lastModified() < cutoff }?.forEach(File::delete)
+    }
+
+    /** Where a stored photo lives, without touching the disk; safe to call during composition. */
+    fun photoLocation(filename: String?): File? = filename?.let { File(photos, File(it).name) }
+    fun thumbnailLocation(filename: String?): File? = filename?.let { File(thumbnails, File(it).name) }
+    fun photoFile(filename: String?): File? = photoLocation(filename)?.takeIf(File::exists)
+    fun thumbnailFile(filename: String?): File? = thumbnailLocation(filename)?.takeIf(File::exists)
     fun ocrSourceFile(filename: String?): File? = filename?.let { File(ocrSources, File(it).name) }?.takeIf(File::exists)
-    fun newCameraFile(): File = File(context.cacheDir, "camera-${System.nanoTime()}.jpg")
+    fun newCameraFile(): File = File(context.cacheDir, "$CAMERA_FILE_PREFIX${System.nanoTime()}.jpg")
 
     suspend fun import(resolver: ContentResolver, uri: Uri, sessionId: String): StoredPhoto = withContext(Dispatchers.IO) {
         val orientation = resolver.openInputStream(uri)?.use { ExifInterface(it).rotationDegrees } ?: 0
@@ -91,25 +104,6 @@ class PhotoStore(private val context: Context) {
 
     fun deleteOcrSourceNow(filename: String?) {
         filename?.let { File(ocrSources, File(it).name).delete() }
-    }
-
-    fun installRestoredPhoto(staged: File, sessionId: String): StoredPhoto {
-        val filename = "$sessionId.jpg"
-        val full = File(photos, filename)
-        val thumbFile = File(thumbnails, filename)
-        check(!full.exists() && !thumbFile.exists()) { "A photo with this ID already exists." }
-        staged.copyTo(full, overwrite = false)
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(full.path, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { full.delete(); error("Restored photo is unreadable.") }
-        var sample = 1
-        while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > THUMBNAIL_MAX_DIMENSION) sample *= 2
-        val bitmap = BitmapFactory.decodeFile(full.path, BitmapFactory.Options().apply { inSampleSize = sample })
-            ?: run { full.delete(); error("Restored photo is unreadable.") }
-        val thumb = scaleDown(bitmap, THUMBNAIL_MAX_DIMENSION)
-        try { writeJpegAtomically(thumb, thumbFile, THUMBNAIL_JPEG_QUALITY) }
-        finally { if (thumb !== bitmap) thumb.recycle(); bitmap.recycle() }
-        return StoredPhoto(filename, filename)
     }
 
     fun copySnapshot(references: List<Pair<String, String?>>, targetPhotos: File) {

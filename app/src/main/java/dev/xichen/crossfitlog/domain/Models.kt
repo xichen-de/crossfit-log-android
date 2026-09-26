@@ -36,10 +36,13 @@ data class MovementSearchResult(
     val thumbnailFilename: String?,
 )
 
+private val combiningMarks = Regex("\\p{M}+")
+private val nonAlphanumeric = Regex("[^a-z0-9]+")
+
 fun normalizeMovementName(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKD)
-    .replace(Regex("\\p{M}+"), "")
+    .replace(combiningMarks, "")
     .lowercase(Locale.ROOT)
-    .replace(Regex("[^a-z0-9]+"), " ")
+    .replace(nonAlphanumeric, " ")
     .trim()
 fun cleanText(value: String): String = value.trim()
 fun isMovementNameValid(value: String): Boolean = cleanText(value).isNotEmpty()

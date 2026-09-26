@@ -41,7 +41,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import dev.xichen.crossfitlog.domain.WorkoutSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -51,15 +50,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val dateFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy · HH:mm")
-private val dayFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
+internal val dayFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
 fun formatDate(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).format(dateFormatter)
 fun formatDay(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).format(dayFormatter)
 fun localDate(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
     Instant.ofEpochMilli(epochMillis).atZone(zoneId).toLocalDate()
-fun sessionsOnDay(sessions: List<WorkoutSession>, dayMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): List<WorkoutSession> {
-    val day = localDate(dayMillis, zoneId)
-    return sessions.filter { localDate(it.sessionTime, zoneId) == day }
-}
+/** Inclusive epoch-millisecond bounds of a local calendar day, including 23- and 25-hour DST days. */
+fun dayBounds(date: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): LongRange =
+    date.atStartOfDay(zoneId).toInstant().toEpochMilli() until date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
 
 @Composable
 fun LocalPhoto(file: File?, description: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
@@ -137,18 +135,27 @@ fun FullscreenPhotoViewer(file: File?, description: String, onDismiss: () -> Uni
 
 // Lazy lists dispose and recompose off-screen items, so without a cache every scroll back into
 // view would redecode the same JPEG from disk, causing GC churn and scroll jank.
-private val localImageCache = object : LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
+private val localImageCache = object : LruCache<String, ImageBitmap>(
+    (Runtime.getRuntime().maxMemory() / 8).coerceIn(16L * 1024 * 1024, 64L * 1024 * 1024).toInt(),
+) {
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.asAndroidBitmap().allocationByteCount
 }
 
+/** Restore can install different images under previously used filenames. */
+fun clearLocalImageCache() = localImageCache.evictAll()
+
+/**
+ * Stored photo filenames are unique per import, so the path alone identifies the image. That keeps
+ * file-system checks off the main thread and lets a cached image render in the first frame.
+ */
 @Composable
 private fun rememberLocalImage(file: File?): ImageBitmap? {
-    val image by produceState<ImageBitmap?>(null, file?.path, file?.lastModified()) {
-        value = file?.takeIf { it.exists() }?.let { f ->
-            val cacheKey = "${f.path}:${f.lastModified()}"
-            localImageCache.get(cacheKey) ?: withContext(Dispatchers.IO) {
-                BitmapFactory.decodeFile(f.path)?.asImageBitmap()
-            }?.also { localImageCache.put(cacheKey, it) }
+    val path = file?.path
+    val image by produceState(path?.let(localImageCache::get), path) {
+        value = path?.let { key ->
+            localImageCache.get(key) ?: withContext(Dispatchers.IO) {
+                BitmapFactory.decodeFile(key)?.asImageBitmap()
+            }?.also { localImageCache.put(key, it) }
         }
     }
     return image

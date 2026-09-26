@@ -29,9 +29,7 @@ class WhiteboardMovementSuggester(
         fragments.forEach { fragment ->
             val fragmentWords = normalizeForMatching(fragment).split(' ').count(String::isNotBlank)
             val ranked = matcher.rank(fragment, candidates)
-                .filter { match ->
-                    match.exact || normalizeForMatching(match.movement).split(' ').count(String::isNotBlank) == fragmentWords
-                }
+                .filter { match -> match.exact || match.wordCount == fragmentWords }
                 .sortedWith(compareByDescending<MovementMatch> { it.exact }.thenByDescending { it.score })
             val best = ranked.firstOrNull() ?: return@forEach
             val normalizedBest = normalizeMovementName(best.movement)

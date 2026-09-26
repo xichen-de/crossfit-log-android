@@ -35,7 +35,7 @@ class SessionFlowTest {
         compose.onNodeWithText("Discard this session?").assertIsDisplayed()
         compose.onNodeWithText("Discard").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Duplicate").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("Edit session").performClick()
+        compose.onNodeWithText("Edit").performClick()
         compose.onNodeWithTag("movement-name-0").performTextReplacement("Front Squat")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Front Squat").fetchSemanticsNodes().isNotEmpty() }
@@ -44,16 +44,18 @@ class SessionFlowTest {
         compose.onNodeWithContentDescription("Movement history").performClick()
         compose.onNodeWithText("Training day").performClick()
         compose.onNodeWithTag("training-day-picker").assertIsDisplayed()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Front Squat").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Front Squat").performClick()
+        // Training-day cards list every movement, e.g. "Front Squat · Pull-up".
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Front Squat", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Front Squat", substring = true).performClick()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithTag("training-day-picker").assertIsDisplayed()
         compose.onNodeWithText("Movement").performClick()
         compose.onNodeWithTag("movement-search").performTextInput("squat")
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Front Squat").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Front Squat").performClick()
-        compose.onNodeWithContentDescription("Edit session").performClick()
-        compose.onNodeWithText("Delete session").performScrollTo().performClick()
+        compose.onNodeWithText("Edit").performClick()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Delete session"))
+        compose.onNodeWithText("Delete session").performClick()
         compose.onNodeWithText("Delete").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Your training log is ready").fetchSemanticsNodes().isNotEmpty() }
     }

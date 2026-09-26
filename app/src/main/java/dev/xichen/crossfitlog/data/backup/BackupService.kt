@@ -56,7 +56,7 @@ class BackupService(
                 files = files,
             )
             archive.outputStream().use { BackupCodec.writeArchive(it, snapshot, manifest) }
-            PreparedBackup(archive, "crossfit-logger-backup-${LocalDate.now()}.zip")
+            PreparedBackup(archive, "crossfit-log-backup-${LocalDate.now()}.zip")
         } catch (error: Throwable) {
             archive.delete()
             throw error
@@ -67,7 +67,7 @@ class BackupService(
 
     suspend fun save(prepared: PreparedBackup, uri: Uri) = withContext(Dispatchers.IO) {
         try {
-            resolver.openOutputStream(uri, "w")?.use { output ->
+            resolver.openOutputStream(uri, "wt")?.use { output ->
                 prepared.archive.inputStream().use { it.copyTo(output) }
             } ?: error("The selected destination could not be opened.")
         } finally {

@@ -45,6 +45,21 @@ class DataExportCodecTest {
         assertFalse(DataExportCodec.encode(value).contains("private.jpg"))
     }
 
+    @Test fun presetsIncludeLaterTodayAndCompleteHistoryIncludesFutureSessions() {
+        val zone = ZoneId.of("Europe/Berlin")
+        val morning = LocalDate.of(2026, 8, 15).atTime(8, 0).atZone(zone).toInstant().toEpochMilli()
+        val evening = LocalDate.of(2026, 8, 15).atTime(19, 0).atZone(zone).toInstant().toEpochMilli()
+        val nextYear = LocalDate.of(2027, 1, 2).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        val sessions = listOf(session("evening", evening, "Row"), session("future", nextYear, "Run"))
+
+        val recent = DataExportCodec.build(sessions, presetDataExportRange(DataExportPreset.Last4Weeks, morning, zone), morning)
+        assertEquals(listOf("evening"), recent.sessions.map { it.id })
+
+        val complete = DataExportCodec.build(sessions, presetDataExportRange(DataExportPreset.CompleteHistory, morning, zone), morning)
+        assertEquals(listOf("evening", "future"), complete.sessions.map { it.id })
+        assertEquals(Instant.ofEpochMilli(nextYear).toString(), complete.range.endDate)
+    }
+
     @Test fun customRangeIncludesTheEntireLocalEndDay() {
         val zone = ZoneId.of("Europe/Berlin")
         val range = customDataExportRange(LocalDate.of(2026, 3, 28), LocalDate.of(2026, 3, 29), zone)

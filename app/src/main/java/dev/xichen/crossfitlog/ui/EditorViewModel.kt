@@ -139,8 +139,12 @@ class EditorViewModel(
 
     fun rankSuggestions(text: String, candidates: List<String>): List<String> = repository.rankSuggestions(text, candidates)
 
-    fun importPhoto(resolver: ContentResolver, uri: Uri) {
-        if (!_state.value.canSave) return
+    /** Imports [uri]; [temporarySource] is a camera capture that is deleted once it has been copied. */
+    fun importPhoto(resolver: ContentResolver, uri: Uri, temporarySource: File? = null) {
+        if (!_state.value.canSave) {
+            temporarySource?.delete()
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(photoProcessing = true, error = null) }
             val previousPhoto = _state.value.draft.photoFilename
@@ -162,6 +166,7 @@ class EditorViewModel(
                     }
                 }
                 .onFailure { error -> _state.update { it.copy(error = error.message ?: "The photo could not be saved.") } }
+            temporarySource?.let { withContext(Dispatchers.IO) { it.delete() } }
             _state.update { it.copy(photoProcessing = false) }
         }
     }

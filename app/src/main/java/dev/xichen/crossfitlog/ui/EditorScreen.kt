@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -41,11 +42,21 @@ import java.util.Calendar
 fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit, onSaved: () -> Unit, onDeleted: () -> Unit) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
-    var cameraOpen by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    var confirmDiscard by remember { mutableStateOf(false) }
+    var cameraOpen by rememberSaveable { mutableStateOf(false) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var photoExpanded by rememberSaveable { mutableStateOf(true) }
     var showPhotoViewer by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    var revealLastMovement by remember { mutableStateOf(false) }
+    // Items before the first movement: optional photo header, whiteboard, date, "Movements" title.
+    val firstMovementItem = (if (state.draft.photoFilename != null) 1 else 0) + 3
+    LaunchedEffect(revealLastMovement, state.draft.movements.size) {
+        if (revealLastMovement) {
+            listState.animateScrollToItem(firstMovementItem + state.draft.movements.lastIndex)
+            revealLastMovement = false
+        }
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { vm.importPhoto(context.contentResolver, it) } }
     LaunchedEffect(state.saved) { if (state.saved) onSaved() }
     LaunchedEffect(state.draft.photoFilename) {
@@ -54,7 +65,7 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
     if (cameraOpen) {
         BackHandler { cameraOpen = false }
         CameraCaptureScreen(photoStore, onCancel = { cameraOpen = false }, onCaptured = { file ->
-            cameraOpen = false; vm.importPhoto(context.contentResolver, Uri.fromFile(file))
+            cameraOpen = false; vm.importPhoto(context.contentResolver, Uri.fromFile(file), temporarySource = file)
         }, onError = { message -> cameraOpen = false; vm.showError(message) })
         return
     }
@@ -120,7 +131,7 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Button(
-                    onClick = vm::addMovement,
+                    onClick = { vm.addMovement(); revealLastMovement = true },
                     enabled = !state.loading && !state.saving,
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 20.dp, vertical = 12.dp),
                 ) {
@@ -132,10 +143,10 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
         },
     ) { padding ->
         if (state.loading) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 40.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        else LazyColumn(Modifier.fillMaxSize().padding(padding), state = listState, contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 40.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             if (state.draft.photoFilename != null) stickyHeader(key = "whiteboard-reference") {
                 StickyPhotoReference(
-                    file = vm.photoFile(),
+                    file = photoStore.photoLocation(state.draft.photoFilename),
                     expanded = photoExpanded,
                     onToggle = { photoExpanded = !photoExpanded },
                     onOpen = { showPhotoViewer = true },
@@ -201,7 +212,7 @@ fun EditorScreen(vm: EditorViewModel, photoStore: PhotoStore, onBack: () -> Unit
         }
     }
     state.error?.let { message -> AlertDialog(onDismissRequest = vm::clearError, title = { Text("Couldn’t continue") }, text = { Text(message) }, confirmButton = { TextButton(onClick = vm::clearError) { Text("OK") } }) }
-    if (showPhotoViewer) FullscreenPhotoViewer(vm.photoFile(), "Selected whiteboard photo", onDismiss = { showPhotoViewer = false })
+    if (showPhotoViewer) FullscreenPhotoViewer(photoStore.photoLocation(state.draft.photoFilename), "Selected whiteboard photo", onDismiss = { showPhotoViewer = false })
 }
 
 @Composable

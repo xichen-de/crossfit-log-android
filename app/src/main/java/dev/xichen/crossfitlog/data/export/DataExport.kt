@@ -21,6 +21,9 @@ data class DataExportRange(
     val endInclusive: Long,
 )
 
+/** End of a range with no upper bound, so sessions dated in the future are still exported. */
+const val OPEN_RANGE_END = Long.MAX_VALUE
+
 enum class DataExportPreset { Last4Weeks, Last12Weeks, ThisYear, CompleteHistory }
 
 fun presetDataExportRange(
@@ -29,11 +32,13 @@ fun presetDataExportRange(
     zoneId: ZoneId = ZoneId.systemDefault(),
 ): DataExportRange {
     val today = Instant.ofEpochMilli(now).atZone(zoneId).toLocalDate()
+    // Include sessions logged for later today, not only those before the current instant.
+    val endOfToday = today.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
     return when (preset) {
-        DataExportPreset.Last4Weeks -> DataExportRange("Last 4 weeks", "last-4-weeks", today.minusWeeks(4).atStartOfDay(zoneId).toInstant().toEpochMilli(), now)
-        DataExportPreset.Last12Weeks -> DataExportRange("Last 12 weeks", "last-12-weeks", today.minusWeeks(12).atStartOfDay(zoneId).toInstant().toEpochMilli(), now)
-        DataExportPreset.ThisYear -> DataExportRange("This year", today.year.toString(), today.withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli(), now)
-        DataExportPreset.CompleteHistory -> DataExportRange("Complete history", "complete", null, now)
+        DataExportPreset.Last4Weeks -> DataExportRange("Last 4 weeks", "last-4-weeks", today.minusWeeks(4).atStartOfDay(zoneId).toInstant().toEpochMilli(), endOfToday)
+        DataExportPreset.Last12Weeks -> DataExportRange("Last 12 weeks", "last-12-weeks", today.minusWeeks(12).atStartOfDay(zoneId).toInstant().toEpochMilli(), endOfToday)
+        DataExportPreset.ThisYear -> DataExportRange("This year", today.year.toString(), today.withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli(), endOfToday)
+        DataExportPreset.CompleteHistory -> DataExportRange("Complete history", "complete", null, OPEN_RANGE_END)
     }
 }
 
@@ -88,12 +93,15 @@ object DataExportCodec {
         val selected = sessions
             .filter { it.sessionTime <= range.endInclusive && (range.startInclusive == null || it.sessionTime >= range.startInclusive) }
             .sortedBy { it.sessionTime }
+        val coveredEnd = if (range.endInclusive == OPEN_RANGE_END) {
+            maxOf(exportedAt, selected.lastOrNull()?.sessionTime ?: exportedAt)
+        } else range.endInclusive
         return CrossFitDataExport(
             exportedAt = Instant.ofEpochMilli(exportedAt).toString(),
             range = ExportRangeMetadata(
                 range.label,
                 range.startInclusive?.let { Instant.ofEpochMilli(it).toString() },
-                Instant.ofEpochMilli(range.endInclusive).toString(),
+                Instant.ofEpochMilli(coveredEnd).toString(),
             ),
             sessionCount = selected.size,
             movementCount = selected.sumOf { it.movements.size },
@@ -125,14 +133,14 @@ class DataExportService(
 ) {
     suspend fun prepare(range: DataExportRange, exportedAt: Long = System.currentTimeMillis()): PreparedDataExport =
         withContext(Dispatchers.IO) {
-            val value = DataExportCodec.build(repository.getAllSessions(), range, exportedAt)
+            val value = DataExportCodec.build(repository.getSessionsBetween(range.startInclusive, range.endInclusive), range, exportedAt)
             require(value.sessions.isNotEmpty()) { "No sessions were found in this time span." }
             PreparedDataExport(DataExportCodec.encode(value), value.sessionCount, value.movementCount)
         }
 
     suspend fun export(uri: Uri, range: DataExportRange): PreparedDataExport = withContext(Dispatchers.IO) {
         val prepared = prepare(range)
-        resolver.openOutputStream(uri, "w")?.bufferedWriter()?.use { it.write(prepared.content) }
+        resolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(prepared.content) }
             ?: error("The selected destination could not be opened.")
         prepared
     }

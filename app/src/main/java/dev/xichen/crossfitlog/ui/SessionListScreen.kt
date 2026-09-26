@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalContext
+import androidx.paging.LoadState
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
@@ -35,8 +36,12 @@ import kotlinx.coroutines.flow.flowOf
 fun SessionListScreen(
     sessionsFlow: Flow<PagingData<WorkoutSession>>, photoStore: PhotoStore,
     onNew: () -> Unit, onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: () -> Unit,
+    sessionCount: Int? = null,
 ) {
     val sessions = sessionsFlow.collectAsLazyPagingItems()
+    val total = sessionCount ?: sessions.itemCount
+    // Avoid flashing the empty state before the first page has been read from the database.
+    val loadingFirstPage = sessions.itemCount == 0 && sessions.loadState.refresh is LoadState.Loading
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { TopAppBar(title = { Text("CrossFit Log", style = MaterialTheme.typography.titleSmall) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background), actions = {
@@ -50,7 +55,8 @@ fun SessionListScreen(
             icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("New session") },
         ) },
     ) { padding ->
-        if (sessions.itemCount == 0) Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+        if (loadingFirstPage) Box(Modifier.fillMaxSize().padding(padding))
+        else if (sessions.itemCount == 0) Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                     Icon(Icons.Outlined.FitnessCenter, null, Modifier.padding(22.dp).size(34.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -65,7 +71,7 @@ fun SessionListScreen(
                 Text("Training log", style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "${sessions.itemCount} session${if (sessions.itemCount == 1) "" else "s"} recorded",
+                    "$total session${if (total == 1) "" else "s"} recorded",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -89,7 +95,7 @@ private fun SessionJournalCard(session: WorkoutSession, photoStore: PhotoStore, 
     ) {
         Row(Modifier.height(IntrinsicSize.Min)) {
             LocalPhoto(
-                photoStore.thumbnailFile(session.thumbnailFilename),
+                photoStore.thumbnailLocation(session.thumbnailFilename),
                 "Whiteboard from ${formatDate(session.sessionTime)}",
                 Modifier.width(116.dp).fillMaxHeight(),
             )

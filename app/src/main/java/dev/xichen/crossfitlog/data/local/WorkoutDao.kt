@@ -31,8 +31,25 @@ abstract class WorkoutDao {
     @Query("SELECT * FROM workout_sessions ORDER BY session_time DESC, created_at DESC")
     abstract suspend fun getAllSessions(): List<SessionWithMovements>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM workout_sessions WHERE id = :id)")
-    abstract suspend fun sessionExists(id: String): Boolean
+    @Transaction
+    @Query("SELECT * FROM workout_sessions WHERE session_time BETWEEN :startInclusive AND :endInclusive ORDER BY session_time DESC, created_at DESC")
+    abstract fun observeSessionsBetween(startInclusive: Long, endInclusive: Long): Flow<List<SessionWithMovements>>
+
+    @Transaction
+    @Query("SELECT * FROM workout_sessions WHERE session_time BETWEEN :startInclusive AND :endInclusive ORDER BY session_time ASC, created_at ASC")
+    abstract suspend fun getSessionsBetween(startInclusive: Long, endInclusive: Long): List<SessionWithMovements>
+
+    @Query("SELECT COUNT(*) FROM workout_sessions")
+    abstract fun observeSessionCount(): Flow<Int>
+
+    @Query("SELECT MAX(session_time) FROM workout_sessions")
+    abstract suspend fun latestSessionTime(): Long?
+
+    @Query("SELECT MAX(session_time) FROM workout_sessions WHERE session_time < :before")
+    abstract fun observeLatestSessionTimeBefore(before: Long): Flow<Long?>
+
+    @Query("SELECT MIN(session_time) FROM workout_sessions WHERE session_time > :after")
+    abstract fun observeEarliestSessionTimeAfter(after: Long): Flow<Long?>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertSession(session: WorkoutSessionEntity)
