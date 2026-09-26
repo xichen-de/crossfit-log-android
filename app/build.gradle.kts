@@ -15,10 +15,10 @@ val keystoreProperties = Properties().apply {
 }
 val personalSigningConfigured = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
     .all { !keystoreProperties.getProperty(it).isNullOrBlank() }
-val releaseVersionName = System.getenv("CROSSFIT_LOG_VERSION_NAME") ?: "1.0.4"
+val releaseVersionName = System.getenv("CROSSFIT_LOG_VERSION_NAME") ?: "1.0.5"
 val releaseVersionCode = System.getenv("CROSSFIT_LOG_VERSION_CODE")?.let { value ->
     requireNotNull(value.toIntOrNull()) { "CROSSFIT_LOG_VERSION_CODE must be an integer" }
-} ?: 1_000_004
+} ?: 1_000_005
 
 android {
     namespace = "dev.xichen.crossfitlog"
